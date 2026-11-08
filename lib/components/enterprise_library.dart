@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:path/path.dart' as p;
 import '../models/playlist_item.dart';
 import '../core/constants.dart';
@@ -27,6 +28,7 @@ class EnterpriseLibrary extends StatefulWidget {
   final VoidCallback onAddMedia;
   final VoidCallback onAddYoutube;
   final Function(int)? onEditItem;
+  final Function(List<String>)? onFilesDropped;
 
   /// Optional panel shown above the list (video conversion progress).
   final Widget? jobsPanel;
@@ -49,6 +51,7 @@ class EnterpriseLibrary extends StatefulWidget {
     required this.onAddMedia,
     required this.onAddYoutube,
     this.onEditItem,
+    this.onFilesDropped,
     this.jobsPanel,
   });
 
@@ -60,6 +63,7 @@ enum _Filter { all, video, audio, image, docs, youtube }
 
 class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
   _Filter _filter = _Filter.all;
+  bool _isDragging = false;
 
   bool _matches(PlaylistItem item) {
     switch (_filter) {
@@ -98,16 +102,28 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          width: widget.width,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceNavy.withOpacity(0.7),
-            border: const Border(
-              right: BorderSide(color: AppColors.glassWhite, width: 1),
+        child: DropTarget(
+          onDragEntered: (_) => setState(() => _isDragging = true),
+          onDragExited: (_) => setState(() => _isDragging = false),
+          onDragDone: (details) {
+            setState(() => _isDragging = false);
+            final paths = details.files.map((f) => f.path).toList();
+            if (paths.isNotEmpty) {
+              widget.onFilesDropped?.call(paths);
+            }
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: widget.width,
+            decoration: BoxDecoration(
+              color: _isDragging ? AppColors.accentCyan.withOpacity(0.12) : AppColors.surfaceNavy.withOpacity(0.7),
+              border: Border.all(
+                color: _isDragging ? AppColors.accentCyan : AppColors.glassWhite,
+                width: _isDragging ? 2 : 1,
+              ),
             ),
-          ),
-          child: Column(
-            children: [
+            child: Column(
+              children: [
               _buildHeader(),
               _buildFilters(),
               _buildSelectionBar(totalSeconds),
@@ -154,8 +170,9 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildHeader() {
     return Container(

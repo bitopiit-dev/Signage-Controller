@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
@@ -605,27 +606,24 @@ class _ControllerScreenState extends State<ControllerScreen>
     }
   }
 
-  Future<void> _pickFiles() async {
-    if (_busyImporting) return;
-    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-    if (result == null) return;
+  Future<void> _importFiles(List<String> filePaths) async {
+    if (_busyImporting || filePaths.isEmpty) return;
     setState(() => _busyImporting = true);
     var added = 0;
     var queued = 0;
     try {
-      for (final file in result.files) {
-        if (file.path == null) continue;
-        final name = file.name;
+      for (final filePath in filePaths) {
+        final name = p.basename(filePath);
         // Videos are converted (if needed) straight from where they are,
         // so even multi-GB movies are never copied twice.
         if (MediaUtils.getMediaType(name) == MediaType.video && _transcoder != null) {
-          _queueConversion(file.path!);
+          _queueConversion(filePath);
           queued++;
           continue;
         }
         final dest = p.join(_mediaDir, name);
-        if (p.normalize(file.path!) != p.normalize(dest)) {
-          await File(file.path!).copy(dest);
+        if (p.normalize(filePath) != p.normalize(dest)) {
+          await File(filePath).copy(dest);
         }
         final type = MediaUtils.getMediaType(name);
         final duration = await MediaUtils.detectDuration(dest, type);
@@ -656,6 +654,14 @@ class _ControllerScreenState extends State<ControllerScreen>
         _playFileAtIndex(0, reason: 'Go live');
       }
     }
+  }
+
+  Future<void> _pickFiles() async {
+    if (_busyImporting) return;
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null) return;
+    final paths = result.files.map((f) => f.path).whereType<String>().toList();
+    await _importFiles(paths);
   }
 
   Future<void> _addYoutubeLink() async {
@@ -1310,8 +1316,19 @@ class _ControllerScreenState extends State<ControllerScreen>
     }
     int durationSec = 0; // 0 = Manual / Until Ended
     String? selectedMediaFilename = _emergencyMediaFilename;
+    bool isDragging = false;
+
     final msgController = TextEditingController(
         text: _emergencyMessage.isEmpty ? 'Please follow staff instructions and proceed to the nearest exit.' : _emergencyMessage);
+
+    Future<void> handleAttachFilePath(String path, String name, Function(void Function()) setLocalState) async {
+      final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+      final targetFilename = 'emergency_$safeName';
+      final dest = p.join(_mediaDir, targetFilename);
+      await File(path).copy(dest);
+      setLocalState(() => selectedMediaFilename = targetFilename);
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1350,15 +1367,15 @@ class _ControllerScreenState extends State<ControllerScreen>
                     const SizedBox(height: 6),
                     if (selectedMediaFilename != null && selectedMediaFilename!.isNotEmpty) ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
                           color: Colors.black38,
                           borderRadius: BorderRadius.circular(AppRadius.standard),
-                          border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
+                          border: Border.all(color: AppColors.accentCyan.withOpacity(0.5)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.image_rounded, color: AppColors.accentCyan, size: 20),
+                            const Icon(Icons.image_rounded, color: AppColors.accentCyan, size: 22),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
@@ -1377,29 +1394,77 @@ class _ControllerScreenState extends State<ControllerScreen>
                         ),
                       ),
                     ] else ...[
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.accentCyan,
-                          side: BorderSide(color: AppColors.accentCyan.withOpacity(0.5)),
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        ),
-                        icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
-                        label: const Text('ATTACH IMAGE / POSTER / FILE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        onPressed: () async {
-                          final result = await FilePicker.platform.pickFiles(
-                            type: FileType.custom,
-                            allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'pdf'],
-                          );
-                          if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
-                            final path = result.files.first.path!;
-                            final name = result.files.first.name;
-                            final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
-                            final targetFilename = 'emergency_$safeName';
-                            final dest = p.join(_mediaDir, targetFilename);
-                            await File(path).copy(dest);
-                            setLocal(() => selectedMediaFilename = targetFilename);
+                      DropTarget(
+                        onDragEntered: (_) => setLocal(() => isDragging = true),
+                        onDragExited: (_) => setLocal(() => isDragging = false),
+                        onDragDone: (details) async {
+                          setLocal(() => isDragging = false);
+                          if (details.files.isNotEmpty) {
+                            final f = details.files.first;
+                            await handleAttachFilePath(f.path, f.name, setLocal);
                           }
                         },
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(AppRadius.standard),
+                          child: InkWell(
+                            onTap: () async {
+                              final result = await FilePicker.platform.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'pdf'],
+                              );
+                              if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
+                                await handleAttachFilePath(result.files.first.path!, result.files.first.name, setLocal);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(AppRadius.standard),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: isDragging ? AppColors.accentCyan.withOpacity(0.15) : Colors.black26,
+                                borderRadius: BorderRadius.circular(AppRadius.standard),
+                                border: Border.all(
+                                  color: isDragging ? AppColors.accentCyan : AppColors.accentCyan.withOpacity(0.4),
+                                  width: isDragging ? 2 : 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    isDragging ? Icons.file_download_rounded : Icons.cloud_upload_rounded,
+                                    size: 24,
+                                    color: isDragging ? AppColors.accentCyan : AppColors.accentCyan,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Flexible(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          isDragging ? 'DROP IMAGE / FILE HERE NOW' : 'DRAG & DROP EMERGENCY IMAGE / FILE HERE',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDragging ? AppColors.accentCyan : Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'or click to browse from computer (.jpg, .png, .mp4, .pdf)',
+                                          style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 16),
