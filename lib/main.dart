@@ -8,7 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
-import 'package:shelf_static/shelf_static.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -1757,6 +1756,31 @@ class _ControllerScreenState extends State<ControllerScreen>
     return Response.ok('{"ok":true}', headers: {'Content-Type': 'application/json'});
   }
 
+  String _getContentType(String filename) {
+    final ext = p.extension(filename).toLowerCase();
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.webp':
+        return 'image/webp';
+      case '.gif':
+        return 'image/gif';
+      case '.mp4':
+        return 'video/mp4';
+      case '.mov':
+        return 'video/quicktime';
+      case '.pdf':
+        return 'application/pdf';
+      case '.json':
+        return 'application/json';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
   Future<void> _startServer() async {
     if (_mediaDir.isEmpty) return;
     final dir = Directory(_mediaDir);
@@ -1764,37 +1788,46 @@ class _ControllerScreenState extends State<ControllerScreen>
       debugPrint('Error: Media directory does not exist at $_mediaDir');
       return;
     }
-    final staticHandler = createStaticHandler(_mediaDir, serveFilesOutsidePath: false);
     final handler = const Pipeline().addMiddleware(_corsMiddleware()).addHandler((req) async {
-      final path = req.url.path;
       try {
-        if (path == 'ping') {
+        final rawPath = req.url.path;
+        final decodedPath = Uri.decodeComponent(rawPath).replaceAll('\\', '/');
+        final cleanPath = decodedPath.startsWith('/') ? decodedPath.substring(1) : decodedPath;
+
+        if (cleanPath == 'ping') {
           return Response.ok(
             jsonEncode({'app': SignageProtocol.appId, 'protocol': SignageProtocol.protocolVersion, 'port': _activePort, 'ip': _localIp}),
             headers: {'Content-Type': 'application/json'},
           );
         }
-        if (path == 'playlist.json' || path == 'state.json') {
+        if (cleanPath == 'playlist.json' || cleanPath == 'state.json') {
           return Response.ok(jsonEncode(_buildStateJson()), headers: {
             'Content-Type': 'application/json; charset=utf-8',
             'Cache-Control': 'no-store',
           });
         }
-        if (path == 'status' && req.method == 'POST') return _handleStatus(req);
-        if (path == 'screenshot' && req.method == 'POST') return _handleScreenshot(req);
-        
-        try {
-          String decodedPath = Uri.decodeComponent(path);
-          if (decodedPath.startsWith('/')) decodedPath = decodedPath.substring(1);
-          final targetFile = File(p.join(_mediaDir, decodedPath));
-          if (await targetFile.exists()) {
-            return await staticHandler(req.change(path: decodedPath));
-          }
-        } catch (_) {}
+        if (cleanPath == 'status' && req.method == 'POST') return _handleStatus(req);
+        if (cleanPath == 'screenshot' && req.method == 'POST') return _handleScreenshot(req);
 
-        return staticHandler(req);
+        // Directly serve any file in the media directory
+        final targetFile = File(p.join(_mediaDir, cleanPath));
+        if (await targetFile.exists()) {
+          final length = await targetFile.length();
+          final contentType = _getContentType(cleanPath);
+          return Response.ok(
+            targetFile.openRead(),
+            headers: {
+              'Content-Type': contentType,
+              'Content-Length': '$length',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=3600',
+            },
+          );
+        }
+
+        return Response.notFound('File not found: $cleanPath');
       } catch (e) {
-        debugPrint('Request error ($path): $e');
+        debugPrint('Request error: $e');
         return Response.internalServerError(body: '$e');
       }
     });
