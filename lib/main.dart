@@ -140,8 +140,29 @@ class _ControllerScreenState extends State<ControllerScreen>
 
   // ── Screen sharing ───────────────────────────────────────
   bool _screenSharingActive = false;
+  String _screenSharingTargetLabel = 'Entire Computer Screen';
   Process? _screenSharingProcess;
   int _screenSharingSeq = 0;
+
+  Future<List<String>> _getOpenWindows() async {
+    if (!Platform.isWindows) return [];
+    try {
+      final res = await Process.run(
+        'powershell',
+        ['-Command', 'Get-Process | Where-Object {\$_.MainWindowTitle} | Select-Object -ExpandProperty MainWindowTitle'],
+        stdoutEncoding: utf8,
+      );
+      if (res.exitCode == 0) {
+        final lines = (res.stdout as String)
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty && s != 'Windows Input Experience' && s != 'Program Manager' && s != 'signagecontroller')
+            .toList();
+        return lines.toSet().toList();
+      }
+    } catch (_) {}
+    return [];
+  }
 
   Future<void> _toggleScreenSharing() async {
     if (_screenSharingActive) {
@@ -153,6 +174,105 @@ class _ControllerScreenState extends State<ControllerScreen>
       return;
     }
 
+    String selectedTarget = 'desktop'; // 'desktop' or 'title=...'
+    String selectedTargetLabel = 'My Computer Screen (Entire Desktop)';
+    List<String> windows = await _getOpenWindows();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceNavy,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              side: const BorderSide(color: AppColors.glassWhite),
+            ),
+            title: Row(
+              children: [
+                const _DialogTitle(
+                  icon: Icons.screen_share_rounded,
+                  text: 'SHARE MY SCREEN',
+                  color: AppColors.accentCyan,
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: AppColors.accentCyan, size: 20),
+                  tooltip: 'Refresh open windows',
+                  onPressed: () async {
+                    final updated = await _getOpenWindows();
+                    setLocal(() => windows = updated);
+                  },
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              height: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Select whether to share your entire computer screen or a specific application window live on all TVs.',
+                      style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
+                  const SizedBox(height: 16),
+                  _label('SELECT DISPLAY SOURCE'),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        _SourceOptionTile(
+                          icon: Icons.desktop_windows_rounded,
+                          title: 'My Computer Screen (Entire Desktop)',
+                          subtitle: 'Shares your entire primary PC display live in real time',
+                          selected: selectedTarget == 'desktop',
+                          onTap: () => setLocal(() {
+                            selectedTarget = 'desktop';
+                            selectedTargetLabel = 'Entire Computer Screen';
+                          }),
+                        ),
+                        const SizedBox(height: 8),
+                        if (windows.isNotEmpty) ...[
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('RUNNING APPLICATION WINDOWS',
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1.2)),
+                          ),
+                          for (final winTitle in windows) ...[
+                            _SourceOptionTile(
+                              icon: Icons.window_rounded,
+                              title: winTitle,
+                              subtitle: 'Share this specific application window',
+                              selected: selectedTarget == 'title=$winTitle',
+                              onTap: () => setLocal(() {
+                                selectedTarget = 'title=$winTitle';
+                                selectedTargetLabel = winTitle;
+                              }),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.actionBlue),
+                onPressed: () => Navigator.pop(ctx, true),
+                icon: const Icon(Icons.cast_connected_rounded, size: 18),
+                label: const Text('START SHARING'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (ok != true) return;
+
     try {
       final targetPath = p.join(_mediaDir, 'screen_frame.jpg');
       final args = <String>[
@@ -161,7 +281,7 @@ class _ControllerScreenState extends State<ControllerScreen>
         '-y',
         '-f', 'gdigrab',
         '-framerate', '12',
-        '-i', 'desktop',
+        '-i', selectedTarget,
         '-vf', "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p",
         '-update', '1',
         '-atomic_writing', '1',
@@ -174,11 +294,12 @@ class _ControllerScreenState extends State<ControllerScreen>
       
       setState(() {
         _screenSharingActive = true;
+        _screenSharingTargetLabel = selectedTargetLabel;
         _screenSharingSeq++;
       });
 
-      _log('Live desktop screen sharing started', AppColors.successEmerald);
-      _toast('Live desktop screen sharing active across all screens');
+      _log('Live screen sharing started: $selectedTargetLabel', AppColors.successEmerald);
+      _toast('Live screen sharing started ($selectedTargetLabel)');
     } catch (e) {
       _log('Failed to start screen sharing: $e', AppColors.dangerRose);
       _toast('Screen sharing failed: $e');
@@ -2136,6 +2257,7 @@ class _ControllerScreenState extends State<ControllerScreen>
               emergencyActive: _emergencyActive,
               emergencyRemainingSeconds: _emergencyRemainingSeconds,
               screenSharingActive: _screenSharingActive,
+              screenSharingTargetLabel: _screenSharingTargetLabel,
               onToggleScreenShare: _toggleScreenSharing,
               activeFilter: _deviceFilter,
               onEmergencyBroadcast: _toggleEmergency,
@@ -2269,6 +2391,78 @@ class _DialogTitle extends StatelessWidget {
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
         ),
       ],
+    );
+  }
+}
+
+class _SourceOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SourceOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.standard),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.standard),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.actionBlue.withOpacity(0.18) : Colors.black26,
+            borderRadius: BorderRadius.circular(AppRadius.standard),
+            border: Border.all(
+              color: selected ? AppColors.actionBlue : AppColors.glassWhite,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: selected ? AppColors.accentCyan : Colors.white70),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                        color: selected ? Colors.white : Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.4)),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle_rounded, size: 18, color: AppColors.actionBlue),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

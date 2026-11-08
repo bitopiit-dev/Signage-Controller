@@ -22,6 +22,7 @@ class ProCommandHeader extends StatelessWidget {
   final bool emergencyActive;
   final int emergencyRemainingSeconds;
   final bool screenSharingActive;
+  final String screenSharingTargetLabel;
   final VoidCallback? onToggleScreenShare;
   final String activeFilter;
 
@@ -44,6 +45,7 @@ class ProCommandHeader extends StatelessWidget {
     this.emergencyActive = false,
     this.emergencyRemainingSeconds = 0,
     this.screenSharingActive = false,
+    this.screenSharingTargetLabel = 'Entire Computer Screen',
     this.onToggleScreenShare,
     this.activeFilter = 'total',
   });
@@ -188,7 +190,7 @@ class ProCommandHeader extends StatelessWidget {
                 ],
                 if (screenSharingActive) ...[
                   const SizedBox(width: AppSpacing.s3),
-                  const _ScreenShareLiveChip(),
+                  _ScreenShareLiveChip(label: screenSharingTargetLabel),
                 ],
               ],
             ),
@@ -536,7 +538,8 @@ class _EmergencyLiveChipState extends State<_EmergencyLiveChip>
 }
 
 class _ScreenShareLiveChip extends StatefulWidget {
-  const _ScreenShareLiveChip();
+  final String label;
+  const _ScreenShareLiveChip({this.label = 'Entire Computer Screen'});
 
   @override
   State<_ScreenShareLiveChip> createState() => _ScreenShareLiveChipState();
@@ -565,13 +568,15 @@ class _ScreenShareLiveChipState extends State<_ScreenShareLiveChip>
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.successEmerald.withOpacity(0.6)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cast_connected_rounded, size: 14, color: AppColors.successEmerald),
-            SizedBox(width: 6),
-            Text('SCREEN SHARE LIVE',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.successEmerald, letterSpacing: 1)),
+            const Icon(Icons.cast_connected_rounded, size: 14, color: AppColors.successEmerald),
+            const SizedBox(width: 6),
+            Text(
+              'SCREEN SHARE LIVE: ${widget.label.toUpperCase()}',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.successEmerald, letterSpacing: 1),
+            ),
           ],
         ),
       ),
