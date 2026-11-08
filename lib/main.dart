@@ -1394,9 +1394,11 @@ class _ControllerScreenState extends State<ControllerScreen>
                           if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
                             final path = result.files.first.path!;
                             final name = result.files.first.name;
-                            final dest = p.join(_mediaDir, 'emergency_$name');
+                            final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+                            final targetFilename = 'emergency_$safeName';
+                            final dest = p.join(_mediaDir, targetFilename);
                             await File(path).copy(dest);
-                            setLocal(() => selectedMediaFilename = 'emergency_$name');
+                            setLocal(() => selectedMediaFilename = targetFilename);
                           }
                         },
                       ),
@@ -1572,6 +1574,28 @@ class _ControllerScreenState extends State<ControllerScreen>
     }
   }
 
+  Map<String, dynamic> _buildEmergencyJson() {
+    final fn = _emergencyActive ? _emergencyMediaFilename : null;
+    final mediaUrl = (fn != null && fn.isNotEmpty)
+        ? 'http://$_localIp:$_activePort/$fn'
+        : null;
+    return {
+      'active': _emergencyActive,
+      'message': _emergencyMessage,
+      'mediaFilename': fn,
+      'filename': fn,
+      'image': fn,
+      'file': fn,
+      'media': fn,
+      'mediaUrl': mediaUrl,
+      'imageUrl': mediaUrl,
+      'url': mediaUrl,
+      'seq': _emergencySeq,
+      'durationSeconds': _emergencyDurationSeconds,
+      'remainingSeconds': _emergencyRemainingSeconds,
+    };
+  }
+
   Map<String, dynamic> _buildStateJson() {
     final pos = _currentPositionMs();
     final item = _currentItem;
@@ -1595,14 +1619,14 @@ class _ControllerScreenState extends State<ControllerScreen>
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
       'repeatOne': _repeatOne,
-      'emergency': {
-        'active': _emergencyActive,
-        'message': _emergencyMessage,
-        'mediaFilename': _emergencyMediaFilename,
-        'seq': _emergencySeq,
-        'durationSeconds': _emergencyDurationSeconds,
-        'remainingSeconds': _emergencyRemainingSeconds,
-      },
+      'emergency': _buildEmergencyJson(),
+      'emergencyItem': (_emergencyActive && _emergencyMediaFilename != null)
+          ? PlaylistItem(
+              filename: _emergencyMediaFilename!,
+              type: MediaUtils.getMediaType(_emergencyMediaFilename!),
+              durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
+            ).toJson()
+          : null,
       'items': _playlist.map((i) => i.toJson()).toList(),
     };
   }
@@ -1682,7 +1706,12 @@ class _ControllerScreenState extends State<ControllerScreen>
       });
     }
     return Response.ok(
-      jsonEncode({'ok': true, 'commands': _commandsFor(id), 'serverTime': now}),
+      jsonEncode({
+        'ok': true,
+        'commands': _commandsFor(id),
+        'serverTime': now,
+        'emergency': _buildEmergencyJson(),
+      }),
       headers: {'Content-Type': 'application/json'},
     );
   }
