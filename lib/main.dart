@@ -2021,9 +2021,21 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
         }
       });
     }
-    final commands = Map<String, dynamic>.from(_commandsFor(id));
+    final c = _commandsFor(id);
+    final double devVol = ((c['volume'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0);
+    final bool devMuted = c['muted'] == true;
+    final double effectiveVol = devMuted ? 0.0 : (devVol * _volume).clamp(0.0, 1.0);
+
+    final commands = Map<String, dynamic>.from(c);
     final stateJson = _buildStateJson();
     
+    // Volume parameters sent to the TV screen
+    commands['volume'] = effectiveVol;
+    commands['deviceVolume'] = devVol;
+    commands['masterVolume'] = _volume;
+    commands['muted'] = devMuted;
+    commands['isMuted'] = devMuted;
+
     // Send command boolean triggers alongside sequence counters for max compatibility across all TV player apps
     if ((commands['rebootSeq'] as int? ?? 0) > 0) {
       commands['reboot'] = true;
@@ -2047,7 +2059,6 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     commands['isStopped'] = stateJson['isStopped'];
     commands['stopped'] = stateJson['stopped'];
     commands['live'] = stateJson['live'];
-    commands['volume'] = _volume;
     if (stateJson['currentFilename'] != null) {
       commands['currentFilename'] = stateJson['currentFilename'];
       commands['jumpToFilename'] = stateJson['currentFilename'];
