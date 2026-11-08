@@ -24,6 +24,7 @@ class CommandCenterMonitor extends StatelessWidget {
   final bool repeatOne;
   final bool emergencyActive;
   final String emergencyMessage;
+  final String? emergencyMediaFilename;
   final int emergencyRemainingSeconds;
   final bool monitorMuted;
   final VoidCallback? onToggleMonitorMute;
@@ -45,6 +46,7 @@ class CommandCenterMonitor extends StatelessWidget {
     this.repeatOne = false,
     this.emergencyActive = false,
     this.emergencyMessage = '',
+    this.emergencyMediaFilename,
     this.emergencyRemainingSeconds = 0,
     this.monitorMuted = true,
     this.onToggleMonitorMute,
@@ -129,6 +131,8 @@ class CommandCenterMonitor extends StatelessWidget {
                     if (emergencyActive)
                       _EmergencyPreview(
                         message: emergencyMessage,
+                        mediaFilename: emergencyMediaFilename,
+                        mediaDir: mediaDir,
                         remainingSeconds: emergencyRemainingSeconds,
                       ),
                   ],
@@ -749,49 +753,100 @@ class _StaticMediaSurface extends StatelessWidget {
 
 class _EmergencyPreview extends StatelessWidget {
   final String message;
+  final String? mediaFilename;
+  final String mediaDir;
   final int remainingSeconds;
-  const _EmergencyPreview({required this.message, this.remainingSeconds = 0});
+
+  const _EmergencyPreview({
+    required this.message,
+    this.mediaFilename,
+    this.mediaDir = '',
+    this.remainingSeconds = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
+    File? imageFile;
+    if (mediaFilename != null && mediaFilename!.isNotEmpty && mediaDir.isNotEmpty) {
+      final f = File(p.join(mediaDir, mediaFilename));
+      if (f.existsSync()) imageFile = f;
+    }
+
     return Container(
       color: const Color(0xE6400010),
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(24),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.campaign, color: AppColors.dangerRose, size: 48),
-            const SizedBox(height: 12),
-            const Text('EMERGENCY BROADCAST',
-                style: TextStyle(color: AppColors.dangerRose, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 12)),
-            if (remainingSeconds > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.dangerRose.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.dangerRose.withOpacity(0.5)),
-                ),
-                child: Text(
-                  'AUTO-ENDS IN ${formatSeconds(remainingSeconds)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.campaign, color: AppColors.dangerRose, size: 28),
+                const SizedBox(width: 8),
+                const Text('EMERGENCY BROADCAST',
+                    style: TextStyle(color: AppColors.dangerRose, fontWeight: FontWeight.w900, letterSpacing: 3, fontSize: 13)),
+                if (remainingSeconds > 0) ...[
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerRose.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.dangerRose.withOpacity(0.5)),
+                    ),
+                    child: Text(
+                      'AUTO-ENDS IN ${formatSeconds(remainingSeconds)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'JetBrains Mono',
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (imageFile != null) ...[
+              Flexible(
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 340),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.large),
+                    border: Border.all(color: AppColors.dangerRose.withOpacity(0.5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(color: AppColors.dangerRose.withOpacity(0.2), blurRadius: 20, spreadRadius: 2),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.file(
+                    imageFile,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded, size: 48, color: Colors.white38),
                   ),
                 ),
               ),
+              const SizedBox(height: 14),
             ],
-            const SizedBox(height: 12),
-            Text(message,
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+            if (message.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(AppRadius.standard),
+                  border: Border.all(color: AppColors.dangerRose.withOpacity(0.3)),
+                ),
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
           ],
         ),
       ),

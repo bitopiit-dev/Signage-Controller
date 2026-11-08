@@ -105,6 +105,7 @@ class _ControllerScreenState extends State<ControllerScreen>
   // ── Emergency broadcast ──────────────────────────────────
   bool _emergencyActive = false;
   String _emergencyMessage = '';
+  String? _emergencyMediaFilename;
   int _emergencySeq = 0;
   int _emergencyDurationSeconds = 0;
   int _emergencyStartedAtMs = 0;
@@ -129,6 +130,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       _emergencyActive = false;
       _emergencyDurationSeconds = 0;
       _emergencyStartedAtMs = 0;
+      _emergencyMediaFilename = null;
       _emergencySeq++;
     });
     final logText = reason != null ? 'Emergency broadcast ended ($reason)' : 'Emergency broadcast ended';
@@ -1308,6 +1310,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       return;
     }
     int durationSec = 0; // 0 = Manual / Until Ended
+    String? selectedMediaFilename = _emergencyMediaFilename;
     final msgController = TextEditingController(
         text: _emergencyMessage.isEmpty ? 'Please follow staff instructions and proceed to the nearest exit.' : _emergencyMessage);
     final ok = await showDialog<bool>(
@@ -1322,79 +1325,136 @@ class _ControllerScreenState extends State<ControllerScreen>
             ),
             title: const _DialogTitle(icon: Icons.campaign, text: 'EMERGENCY BROADCAST', color: AppColors.dangerRose),
             content: SizedBox(
-              width: 480,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('This message takes over every connected screen and mutes playback until ended or timer expires.',
-                      style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
-                  const SizedBox(height: 16),
-                  _label('EMERGENCY MESSAGE'),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: msgController,
-                    maxLines: 3,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.black26,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.standard)),
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('This message takes over every connected screen and mutes playback until ended or timer expires.',
+                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
+                    const SizedBox(height: 16),
+                    _label('EMERGENCY MESSAGE (TEXT)'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: msgController,
+                      maxLines: 2,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.black26,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.standard)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _label('BROADCAST TIMER / DURATION'),
-                      const Spacer(),
-                      Text(
-                        durationSec == 0
-                            ? 'UNTIL ENDED (MANUAL)'
-                            : '${formatSeconds(durationSec)} (${durationSec < 60 ? "$durationSec sec" : "${durationSec ~/ 60} min"})',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.accentCyan,
-                          fontFamily: 'JetBrains Mono',
+                    const SizedBox(height: 16),
+                    _label('EMERGENCY POSTER / IMAGE / MEDIA FILE (OPTIONAL)'),
+                    const SizedBox(height: 6),
+                    if (selectedMediaFilename != null && selectedMediaFilename!.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(AppRadius.standard),
+                          border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.image_rounded, color: AppColors.accentCyan, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                selectedMediaFilename!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, color: AppColors.dangerRose, size: 18),
+                              onPressed: () => setLocal(() => selectedMediaFilename = null),
+                              tooltip: 'Remove media file',
+                            ),
+                          ],
                         ),
                       ),
+                    ] else ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.accentCyan,
+                          side: BorderSide(color: AppColors.accentCyan.withOpacity(0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                        ),
+                        icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                        label: const Text('ATTACH IMAGE / POSTER / FILE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () async {
+                          final result = await FilePicker.platform.pickFiles(
+                            type: FileType.custom,
+                            allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'pdf'],
+                          );
+                          if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
+                            final path = result.files.first.path!;
+                            final name = result.files.first.name;
+                            final dest = p.join(_mediaDir, 'emergency_$name');
+                            await File(path).copy(dest);
+                            setLocal(() => selectedMediaFilename = 'emergency_$name');
+                          }
+                        },
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      0,   // Manual
-                      30,  // 30s
-                      60,  // 1m
-                      120, // 2m
-                      300, // 5m
-                      600, // 10m
-                      900, // 15m
-                      1800,// 30m
-                    ].map((sec) {
-                      final selected = durationSec == sec;
-                      final label = sec == 0
-                          ? 'Manual'
-                          : (sec < 60 ? '${sec}s' : '${sec ~/ 60}m');
-                      return ChoiceChip(
-                        label: Text(label, style: const TextStyle(fontSize: 11)),
-                        selected: selected,
-                        selectedColor: AppColors.dangerRose.withOpacity(0.25),
-                        backgroundColor: Colors.white.withOpacity(0.04),
-                        labelStyle: TextStyle(
-                          color: selected ? Colors.white : Colors.white70,
-                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _label('BROADCAST TIMER / DURATION'),
+                        const Spacer(),
+                        Text(
+                          durationSec == 0
+                              ? 'UNTIL ENDED (MANUAL)'
+                              : '${formatSeconds(durationSec)} (${durationSec < 60 ? "$durationSec sec" : "${durationSec ~/ 60} min"})',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.accentCyan,
+                            fontFamily: 'JetBrains Mono',
+                          ),
                         ),
-                        side: BorderSide(
-                          color: selected ? AppColors.dangerRose : Colors.white10,
-                        ),
-                        onSelected: (_) => setLocal(() => durationSec = sec),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        0,   // Manual
+                        30,  // 30s
+                        60,  // 1m
+                        120, // 2m
+                        300, // 5m
+                        600, // 10m
+                        900, // 15m
+                        1800,// 30m
+                      ].map((sec) {
+                        final selected = durationSec == sec;
+                        final label = sec == 0
+                            ? 'Manual'
+                            : (sec < 60 ? '${sec}s' : '${sec ~/ 60}m');
+                        return ChoiceChip(
+                          label: Text(label, style: const TextStyle(fontSize: 11)),
+                          selected: selected,
+                          selectedColor: AppColors.dangerRose.withOpacity(0.25),
+                          backgroundColor: Colors.white.withOpacity(0.04),
+                          labelStyle: TextStyle(
+                            color: selected ? Colors.white : Colors.white70,
+                            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          side: BorderSide(
+                            color: selected ? AppColors.dangerRose : Colors.white10,
+                          ),
+                          onSelected: (_) => setLocal(() => durationSec = sec),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -1413,6 +1473,7 @@ class _ControllerScreenState extends State<ControllerScreen>
     if (ok != true) return;
     setState(() {
       _emergencyMessage = msgController.text.trim().isEmpty ? 'EMERGENCY' : msgController.text.trim();
+      _emergencyMediaFilename = selectedMediaFilename;
       _emergencyDurationSeconds = durationSec;
       _emergencyStartedAtMs = _nowMs;
       _emergencyActive = true;
@@ -1537,6 +1598,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       'emergency': {
         'active': _emergencyActive,
         'message': _emergencyMessage,
+        'mediaFilename': _emergencyMediaFilename,
         'seq': _emergencySeq,
         'durationSeconds': _emergencyDurationSeconds,
         'remainingSeconds': _emergencyRemainingSeconds,
@@ -1854,6 +1916,7 @@ class _ControllerScreenState extends State<ControllerScreen>
                     repeatOne: _repeatOne,
                     emergencyActive: _emergencyActive,
                     emergencyMessage: _emergencyMessage,
+                    emergencyMediaFilename: _emergencyMediaFilename,
                     emergencyRemainingSeconds: _emergencyRemainingSeconds,
                     monitorMuted: _monitorMuted,
                     onToggleMonitorMute: () {
