@@ -43,24 +43,24 @@ class CommandCenterDock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.s1, left: AppSpacing.s2, right: AppSpacing.s2),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s2),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s3, vertical: AppSpacing.s2),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceNavy.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(AppRadius.large * 2),
-        border: Border.all(color: AppColors.glassWhite, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.6),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
+          margin: const EdgeInsets.only(bottom: AppSpacing.s2),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s3, vertical: AppSpacing.s2),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceNavy.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(AppRadius.large * 2),
+            border: Border.all(color: AppColors.glassWhite, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.6),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: IntrinsicHeight(
+          child: IntrinsicHeight(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -300,55 +300,47 @@ class _DockButton extends StatelessWidget {
   }
 }
 
-class _MainActionCircle extends StatefulWidget {
+class _MainActionCircle extends StatelessWidget {
   final bool isPaused;
   final VoidCallback onPressed;
 
-  const _MainActionCircle({required this.isPaused, required this.onPressed});
-
-  @override
-  State<_MainActionCircle> createState() => _MainActionCircleState();
-}
-
-class _MainActionCircleState extends State<_MainActionCircle> {
-  bool _isHovered = false;
+  const _MainActionCircle({
+    required this.isPaused,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedScale(
-        scale: _isHovered ? 1.05 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [AppColors.actionBlue, Color(0xFF0077FF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.actionBlue.withOpacity(0.4),
-                blurRadius: 20,
-                spreadRadius: 2,
-              )
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onPressed,
-              customBorder: const CircleBorder(),
-              child: Icon(
-                widget.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                size: 32,
-                color: Colors.white,
+    return Tooltip(
+      message: isPaused ? 'Play / Go Live (all screens)' : 'Pause (all screens)',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [AppColors.actionBlue, Color(0xFF0077FF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.actionBlue.withOpacity(0.4),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+            child: Icon(
+              isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              size: 34,
+              color: Colors.white,
             ),
           ),
         ),
