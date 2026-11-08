@@ -171,7 +171,7 @@ class DeviceCommandWall extends StatelessWidget {
 
   Widget _buildActivityFeed(int now) {
     return Container(
-      height: 180,
+      height: 140,
       padding: const EdgeInsets.all(AppSpacing.s2),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.2),
@@ -184,11 +184,12 @@ class DeviceCommandWall extends StatelessWidget {
             'ACTIVITY FEED',
             style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1.5),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Expanded(
             child: activity.isEmpty
                 ? Text('No activity yet', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.25)))
                 : ListView.builder(
+                    padding: EdgeInsets.zero,
                     itemCount: activity.length,
                     itemBuilder: (context, i) {
                       final a = activity[i];
@@ -208,8 +209,8 @@ class DeviceCommandWall extends StatelessWidget {
   Widget _buildWatermark() {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.all(AppSpacing.s2),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 6, AppSpacing.s2, AppSpacing.s2),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.5),
         borderRadius: BorderRadius.circular(AppRadius.large),
@@ -222,17 +223,17 @@ class DeviceCommandWall extends StatelessWidget {
           Text(
             'Developed By K A Rahman',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: Colors.white.withOpacity(0.7),
               letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           const Text(
             'BGL IT Signage',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: AppColors.accentCyan,
               letterSpacing: 1.2,
