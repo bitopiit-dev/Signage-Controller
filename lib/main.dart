@@ -1457,6 +1457,26 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
           c['muted'] = !(c['muted'] == true);
           _log('${c['muted'] == true ? 'Muted' : 'Unmuted'} $label', Colors.white54);
           break;
+        case 'togglePause':
+          final isP = c['paused'] == true;
+          c['paused'] = !isP;
+          c['syncMaster'] = false;
+          _log('${c['paused'] == true ? 'Paused' : 'Resumed'} $label', AppColors.warningAmber);
+          break;
+        case 'playMedia':
+          c['overrideFilename'] = value as String?;
+          c['syncMaster'] = false;
+          c['paused'] = false;
+          c['stopped'] = false;
+          _log('Assigned media to $label: $value', AppColors.accentCyan);
+          break;
+        case 'syncMaster':
+          c['syncMaster'] = true;
+          c['overrideFilename'] = null;
+          c['paused'] = false;
+          c['stopped'] = false;
+          _log('Synced $label back to Master Loop', AppColors.successEmerald);
+          break;
         case 'reboot':
           _bumpDeviceSeq(id, 'reboot');
           _log('Restart sent to $label', AppColors.dangerRose);
@@ -2026,9 +2046,26 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     final bool devMuted = c['muted'] == true;
     final double effectiveVol = devMuted ? 0.0 : (devVol * _volume).clamp(0.0, 1.0);
 
+    final bool devSync = c['syncMaster'] != false;
+    final String? devOverride = c['overrideFilename'] as String?;
+    final bool devPaused = c['paused'] == true;
+    final bool devStopped = c['stopped'] == true;
+
     final commands = Map<String, dynamic>.from(c);
     final stateJson = _buildStateJson();
-    
+
+    final String? effectiveFn = devSync
+        ? stateJson['currentFilename']
+        : devOverride;
+
+    final bool effectivePaused = devSync
+        ? (stateJson['isPaused'] == true)
+        : devPaused;
+
+    final bool effectiveStopped = devSync
+        ? (stateJson['isStopped'] == true)
+        : devStopped;
+
     // Volume parameters sent to the TV screen
     commands['volume'] = effectiveVol;
     commands['deviceVolume'] = devVol;
@@ -2054,27 +2091,26 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     }
 
     // Merge playback state into commands map so poll-based TV apps get immediate updates
-    commands['isPaused'] = stateJson['isPaused'];
-    commands['paused'] = stateJson['paused'];
-    commands['isStopped'] = stateJson['isStopped'];
-    commands['stopped'] = stateJson['stopped'];
-    commands['live'] = stateJson['live'];
-    if (stateJson['currentFilename'] != null) {
-      commands['currentFilename'] = stateJson['currentFilename'];
-      commands['jumpToFilename'] = stateJson['currentFilename'];
-      commands['jumpTo'] = stateJson['currentFilename'];
-    } else {
-      commands['currentFilename'] = null;
-      commands['jumpToFilename'] = null;
-      commands['jumpTo'] = null;
-    }
-    commands['screenShare'] = _screenSharingActive;
-    commands['screenSharing'] = _screenSharingActive;
-    if (_screenSharingActive) {
+    commands['isPaused'] = effectivePaused;
+    commands['paused'] = effectivePaused;
+    commands['isStopped'] = effectiveStopped;
+    commands['stopped'] = effectiveStopped;
+    commands['live'] = !effectiveStopped;
+    commands['syncMaster'] = devSync;
+
+    if (_screenSharingActive && devSync) {
       commands['screenShareUrl'] = 'http://$_localIp:$_activePort/screen_frame.jpg';
       commands['currentFilename'] = 'screen_frame.jpg';
       commands['jumpToFilename'] = 'screen_frame.jpg';
       commands['jumpTo'] = 'screen_frame.jpg';
+    } else if (effectiveFn != null) {
+      commands['currentFilename'] = effectiveFn;
+      commands['jumpToFilename'] = effectiveFn;
+      commands['jumpTo'] = effectiveFn;
+    } else {
+      commands['currentFilename'] = null;
+      commands['jumpToFilename'] = null;
+      commands['jumpTo'] = null;
     }
     commands['jumpToSeq'] = _jumpSeq;
     commands['seekSeq'] = _seekSeq;
@@ -2423,6 +2459,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
                   DeviceCommandWall(
                     width: compact ? 310 : 350,
                     devices: devices,
+                    playlist: _playlist,
                     filter: _deviceFilter,
                     commands: _deviceCommands,
                     screenshots: _screenshots,
