@@ -138,6 +138,65 @@ class _ControllerScreenState extends State<ControllerScreen>
     _toast(logText);
   }
 
+  // ── Screen sharing ───────────────────────────────────────
+  bool _screenSharingActive = false;
+  Process? _screenSharingProcess;
+  int _screenSharingSeq = 0;
+
+  Future<void> _toggleScreenSharing() async {
+    if (_screenSharingActive) {
+      _stopScreenSharing();
+      return;
+    }
+    if (_ffmpeg == null) {
+      _toast('FFmpeg tools not found on system');
+      return;
+    }
+
+    try {
+      final targetPath = p.join(_mediaDir, 'screen_frame.jpg');
+      final args = <String>[
+        '-hide_banner',
+        '-nostdin',
+        '-y',
+        '-f', 'gdigrab',
+        '-framerate', '12',
+        '-i', 'desktop',
+        '-vf', "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p",
+        '-update', '1',
+        '-atomic_writing', '1',
+        '-q:v', '3',
+        targetPath,
+      ];
+
+      final proc = await Process.start(_ffmpeg!.ffmpeg, args);
+      _screenSharingProcess = proc;
+      
+      setState(() {
+        _screenSharingActive = true;
+        _screenSharingSeq++;
+      });
+
+      _log('Live desktop screen sharing started', AppColors.successEmerald);
+      _toast('Live desktop screen sharing active across all screens');
+    } catch (e) {
+      _log('Failed to start screen sharing: $e', AppColors.dangerRose);
+      _toast('Screen sharing failed: $e');
+    }
+  }
+
+  void _stopScreenSharing() {
+    if (!_screenSharingActive) return;
+    _screenSharingProcess?.kill();
+    _screenSharingProcess = null;
+    setState(() {
+      _screenSharingActive = false;
+      _screenSharingSeq++;
+    });
+    _log('Live screen sharing stopped', AppColors.warningAmber);
+    _toast('Screen sharing stopped');
+  }
+
   // ── Local preview on the controller ──────────────────────
   VideoPlayerController? _previewController;
   String? _previewFilename;
@@ -188,6 +247,7 @@ class _ControllerScreenState extends State<ControllerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _transcoder?.cancelAll();
+    _screenSharingProcess?.kill();
     _server?.close(force: true);
     _discoverySocket?.close();
     _tickTimer?.cancel();
@@ -1665,33 +1725,36 @@ class _ControllerScreenState extends State<ControllerScreen>
     final pos = _currentPositionMs();
     final item = _currentItem;
     
-    // When emergency mode is active with an attached image/poster file,
-    // override currentFilename and items so TVs display the emergency poster full screen,
-    // bypassing the TV app's text-only evacuation overlay.
+    // Override currentFilename and items when emergency media or screen share is active
     final bool hasEmergencyMedia = _emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty;
-    
-    final effectiveCurrentFilename = hasEmergencyMedia
+    final bool isScreenSharing = _screenSharingActive;
+    final String? activeOverrideFilename = hasEmergencyMedia
         ? _emergencyMediaFilename
+        : (isScreenSharing ? 'screen_frame.jpg' : null);
+    final bool hasMediaOverride = activeOverrideFilename != null;
+    
+    final effectiveCurrentFilename = hasMediaOverride
+        ? activeOverrideFilename
         : (_isStopped ? null : _currentFilename);
         
-    final effectiveItems = hasEmergencyMedia
+    final effectiveItems = hasMediaOverride
         ? [
             PlaylistItem(
-              filename: _emergencyMediaFilename!,
-              type: MediaUtils.getMediaType(_emergencyMediaFilename!),
+              filename: activeOverrideFilename,
+              type: MediaUtils.getMediaType(activeOverrideFilename),
               durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
             ).toJson()
           ]
         : _playlist.map((i) => i.toJson()).toList();
 
-    final bool isLive = hasEmergencyMedia ? true : !_isStopped;
-    final bool isStopped = hasEmergencyMedia ? false : _isStopped;
-    final bool isPaused = hasEmergencyMedia ? false : _isPaused;
+    final bool isLive = hasMediaOverride ? true : !_isStopped;
+    final bool isStopped = hasMediaOverride ? false : _isStopped;
+    final bool isPaused = hasMediaOverride ? false : _isPaused;
 
     return {
       'app': SignageProtocol.appId,
       'protocol': SignageProtocol.protocolVersion,
-      'version': _playlistVersion + (_emergencyActive ? 10000 : 0),
+      'version': _playlistVersion + (_emergencyActive ? 10000 : 0) + (_screenSharingActive ? 20000 : 0),
       'serverTime': _nowMs,
       'live': isLive,
       'stopped': isStopped,
@@ -1702,14 +1765,19 @@ class _ControllerScreenState extends State<ControllerScreen>
       'currentFilename': effectiveCurrentFilename,
       'currentPosition': pos ~/ 1000,
       'currentPositionMs': pos,
-      'currentDurationMs': hasEmergencyMedia ? 3600000 : (item == null ? 0 : _effectiveDurationMs(item)),
-      'nextFilename': hasEmergencyMedia ? _emergencyMediaFilename : (_isStopped ? null : _nextFilename),
-      'jumpToSeq': _jumpSeq + (_emergencyActive ? 1000 : 0),
+      'currentDurationMs': hasMediaOverride ? 3600000 : (item == null ? 0 : _effectiveDurationMs(item)),
+      'nextFilename': hasMediaOverride ? activeOverrideFilename : (_isStopped ? null : _nextFilename),
+      'jumpToSeq': _jumpSeq + (_emergencyActive ? 1000 : 0) + (_screenSharingActive ? 2000 : 0),
       'jumpToFilename': effectiveCurrentFilename,
       'seekSeq': _seekSeq,
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
       'repeatOne': _repeatOne,
+      'screenSharing': {
+        'active': _screenSharingActive,
+        'url': _screenSharingActive ? 'http://$_localIp:$_activePort/screen_frame.jpg' : null,
+        'seq': _screenSharingSeq,
+      },
       'emergency': _buildEmergencyJson(),
       'emergencyItem': hasEmergencyMedia
           ? PlaylistItem(
@@ -1831,6 +1899,14 @@ class _ControllerScreenState extends State<ControllerScreen>
       commands['currentFilename'] = null;
       commands['jumpToFilename'] = null;
       commands['jumpTo'] = null;
+    }
+    commands['screenShare'] = _screenSharingActive;
+    commands['screenSharing'] = _screenSharingActive;
+    if (_screenSharingActive) {
+      commands['screenShareUrl'] = 'http://$_localIp:$_activePort/screen_frame.jpg';
+      commands['currentFilename'] = 'screen_frame.jpg';
+      commands['jumpToFilename'] = 'screen_frame.jpg';
+      commands['jumpTo'] = 'screen_frame.jpg';
     }
     commands['jumpToSeq'] = _jumpSeq;
     commands['seekSeq'] = _seekSeq;
@@ -2059,6 +2135,8 @@ class _ControllerScreenState extends State<ControllerScreen>
               serverLoad: _uptime(),
               emergencyActive: _emergencyActive,
               emergencyRemainingSeconds: _emergencyRemainingSeconds,
+              screenSharingActive: _screenSharingActive,
+              onToggleScreenShare: _toggleScreenSharing,
               activeFilter: _deviceFilter,
               onEmergencyBroadcast: _toggleEmergency,
               onForceSync: _forceSync,
@@ -2093,6 +2171,7 @@ class _ControllerScreenState extends State<ControllerScreen>
                     onSelectAll: _selectAll,
                     onDeleteSelected: _deleteSelected,
                     onAddMedia: _pickFiles,
+                    onFilesDropped: _importFiles,
                     onAddYoutube: _addYoutubeLink,
                     onEditItem: _editItem,
                     jobsPanel: _buildJobsPanel(),
@@ -2114,6 +2193,7 @@ class _ControllerScreenState extends State<ControllerScreen>
                     emergencyMessage: _emergencyMessage,
                     emergencyMediaFilename: _emergencyMediaFilename,
                     emergencyRemainingSeconds: _emergencyRemainingSeconds,
+                    screenSharingActive: _screenSharingActive,
                     monitorMuted: _monitorMuted,
                     onToggleMonitorMute: () {
                       setState(() => _monitorMuted = !_monitorMuted);

@@ -21,6 +21,8 @@ class ProCommandHeader extends StatelessWidget {
   final Function(String)? onCardTap;
   final bool emergencyActive;
   final int emergencyRemainingSeconds;
+  final bool screenSharingActive;
+  final VoidCallback? onToggleScreenShare;
   final String activeFilter;
 
   const ProCommandHeader({
@@ -41,6 +43,8 @@ class ProCommandHeader extends StatelessWidget {
     this.onCardTap,
     this.emergencyActive = false,
     this.emergencyRemainingSeconds = 0,
+    this.screenSharingActive = false,
+    this.onToggleScreenShare,
     this.activeFilter = 'total',
   });
 
@@ -165,9 +169,26 @@ class ProCommandHeader extends StatelessWidget {
                     ButtonAction(label: 'Clear Cache', icon: Icons.cleaning_services, onTap: onClearCache),
                   ],
                 ),
+                const SizedBox(width: AppSpacing.s3),
+                ButtonGroup(
+                  title: 'SCREEN SHARE',
+                  actions: [
+                    ButtonAction(
+                      label: screenSharingActive ? 'Stop Sharing' : 'Share My Screen',
+                      icon: screenSharingActive ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                      onTap: onToggleScreenShare,
+                      isDanger: screenSharingActive,
+                      isActive: screenSharingActive,
+                    ),
+                  ],
+                ),
                 if (emergencyActive) ...[
                   const SizedBox(width: AppSpacing.s3),
                   _EmergencyLiveChip(remainingSeconds: emergencyRemainingSeconds),
+                ],
+                if (screenSharingActive) ...[
+                  const SizedBox(width: AppSpacing.s3),
+                  const _ScreenShareLiveChip(),
                 ],
               ],
             ),
@@ -507,6 +528,50 @@ class _EmergencyLiveChipState extends State<_EmergencyLiveChip>
                   : 'EMERGENCY ON AIR',
               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.dangerRose, letterSpacing: 1),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScreenShareLiveChip extends StatefulWidget {
+  const _ScreenShareLiveChip();
+
+  @override
+  State<_ScreenShareLiveChip> createState() => _ScreenShareLiveChipState();
+}
+
+class _ScreenShareLiveChipState extends State<_ScreenShareLiveChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 800))
+        ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween(begin: 0.45, end: 1.0).animate(_c),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.successEmerald.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.successEmerald.withOpacity(0.6)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cast_connected_rounded, size: 14, color: AppColors.successEmerald),
+            SizedBox(width: 6),
+            Text('SCREEN SHARE LIVE',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.successEmerald, letterSpacing: 1)),
           ],
         ),
       ),

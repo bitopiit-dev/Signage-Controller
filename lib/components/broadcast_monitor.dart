@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -26,6 +27,7 @@ class CommandCenterMonitor extends StatelessWidget {
   final String emergencyMessage;
   final String? emergencyMediaFilename;
   final int emergencyRemainingSeconds;
+  final bool screenSharingActive;
   final bool monitorMuted;
   final VoidCallback? onToggleMonitorMute;
   final ValueChanged<int>? onSeekTo;
@@ -48,6 +50,7 @@ class CommandCenterMonitor extends StatelessWidget {
     this.emergencyMessage = '',
     this.emergencyMediaFilename,
     this.emergencyRemainingSeconds = 0,
+    this.screenSharingActive = false,
     this.monitorMuted = true,
     this.onToggleMonitorMute,
     this.onSeekTo,
@@ -128,6 +131,8 @@ class CommandCenterMonitor extends StatelessWidget {
                           ),
                         ),
                       ),
+                    if (screenSharingActive)
+                      _ScreenSharePreview(mediaDir: mediaDir),
                     if (emergencyActive)
                       _EmergencyPreview(
                         message: emergencyMessage,
@@ -849,6 +854,90 @@ class _EmergencyPreview extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ScreenSharePreview extends StatefulWidget {
+  final String mediaDir;
+  const _ScreenSharePreview({required this.mediaDir});
+
+  @override
+  State<_ScreenSharePreview> createState() => _ScreenSharePreviewState();
+}
+
+class _ScreenSharePreviewState extends State<_ScreenSharePreview> {
+  Timer? _refreshTimer;
+  int _ticks = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted) setState(() => _ticks++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    File? frameFile;
+    if (widget.mediaDir.isNotEmpty) {
+      final f = File(p.join(widget.mediaDir, 'screen_frame.jpg'));
+      if (f.existsSync()) frameFile = f;
+    }
+
+    return Container(
+      color: Colors.black87,
+      child: Stack(
+        children: [
+          Center(
+            child: frameFile != null
+                ? Image.file(
+                    frameFile,
+                    key: ValueKey('frame_$_ticks'),
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.cast_connected_rounded, size: 48, color: AppColors.accentCyan),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cast_connected_rounded, size: 48, color: AppColors.accentCyan),
+                      const SizedBox(height: 12),
+                      const Text('STARTING LIVE SCREEN SHARE...',
+                          style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                    ],
+                  ),
+          ),
+          Positioned(
+            top: 20,
+            left: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.successEmerald.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.successEmerald.withOpacity(0.6)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.cast_connected_rounded, size: 14, color: AppColors.successEmerald),
+                  SizedBox(width: 6),
+                  Text('LIVE DESKTOP SCREEN SHARE',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.successEmerald, letterSpacing: 1)),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
