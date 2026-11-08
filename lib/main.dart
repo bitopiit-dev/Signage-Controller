@@ -802,6 +802,31 @@ class _ControllerScreenState extends State<ControllerScreen>
                     );
                   }).toList(),
                 ),
+                if ((item.type == MediaType.video || item.type == MediaType.movie) && _transcoder != null) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentCyan,
+                        side: BorderSide(color: AppColors.accentCyan.withOpacity(0.6)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: const Icon(Icons.movie_filter_rounded, size: 16),
+                      label: const Text('CONVERT FOR ALL TVs', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      onPressed: () {
+                        final path = p.join(_mediaDir, item.filename);
+                        if (File(path).existsSync()) {
+                          _queueConversion(path, replaces: item.filename);
+                          _toast('Video conversion started for ${item.filename}');
+                          Navigator.pop(ctx);
+                        } else {
+                          _toast('File not found in media folder');
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1558,10 +1583,29 @@ class _ControllerScreenState extends State<ControllerScreen>
         final state = (data['state'] ??
                 (data['isPaused'] == true ? 'paused' : 'playing'))
             .toString();
+        final lastErr = (data['lastError'] ?? data['error'] ?? '').toString();
         final posMs = (data['positionMs'] as num?)?.toInt() ??
             (((data['position'] as num?)?.toInt() ?? 0) * 1000);
         final durMs = (data['durationMs'] as num?)?.toInt() ??
             (((data['duration'] as num?)?.toInt() ?? 0) * 1000);
+
+        // Auto-detect TV hardware decoding errors and automatically convert the video for full compatibility
+        if (fn != null && fn.isNotEmpty && (state == 'error' || lastErr.isNotEmpty)) {
+          if (lastErr.contains('MediaCodec') ||
+              lastErr.contains('cannot decode') ||
+              lastErr.contains('VideoError') ||
+              lastErr.contains('UNABLE TO PLAY') ||
+              state == 'error') {
+            final path = p.join(_mediaDir, fn);
+            if (File(path).existsSync() && _transcoder != null) {
+              if (!_transcoder!.jobs.any((j) => j.isActive && j.replaces == fn)) {
+                _log('TV reported video decode error ($fn) – Auto-converting for TV compatibility', AppColors.warningAmber);
+                _queueConversion(path, replaces: fn);
+              }
+            }
+          }
+        }
+
         if (fn != null &&
             fn == _currentFilename &&
             state == 'playing' &&

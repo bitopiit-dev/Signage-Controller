@@ -73,20 +73,21 @@ class ProbeResult {
 
   bool get hasVideo => vCodec != null;
 
-  /// H.264 8-bit 4:2:0, at most 1080p30, level 4.1, ~20 Mbit/s.
-  /// This is what practically every Android TV can hardware-decode.
+  /// H.264 8-bit 4:2:0 Main/Baseline profile, at most 1080p30, level 4.0, <= 15 Mbit/s.
+  /// Enforcing Main or Baseline profile ensures hardware decoding compatibility across
+  /// 100% of Android TVs (including Triton, Fire TV, and low-end TV boxes that fail on High profile).
   bool get videoCompatible {
     if (vCodec != 'h264') return false;
     if (pixFmt != 'yuv420p' && pixFmt != 'yuvj420p') return false;
     final prof = (vProfile ?? '').toLowerCase();
-    if (!(prof == 'main' || prof == 'high' || prof.contains('baseline'))) return false;
+    if (!(prof == 'main' || prof.contains('baseline'))) return false;
     final longSide = width > height ? width : height;
     final shortSide = width > height ? height : width;
     if (longSide > 1920 || shortSide > 1080) return false;
     if (fps > 30.5) return false;
-    if (level > 41) return false;
+    if (level > 40) return false;
     final br = vBitRate > 0 ? vBitRate : formatBitRate;
-    if (br > 20000000) return false;
+    if (br > 15000000) return false;
     return true;
   }
 
