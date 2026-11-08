@@ -1599,35 +1599,69 @@ class _ControllerScreenState extends State<ControllerScreen>
   Map<String, dynamic> _buildStateJson() {
     final pos = _currentPositionMs();
     final item = _currentItem;
+    
+    // When emergency mode is active with an attached image/poster file,
+    // override currentFilename and items so TVs display the emergency poster full screen,
+    // bypassing the TV app's text-only evacuation overlay.
+    final bool hasEmergencyMedia = _emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty;
+    
+    final effectiveCurrentFilename = hasEmergencyMedia
+        ? _emergencyMediaFilename
+        : (_isStopped ? null : _currentFilename);
+        
+    final effectiveItems = hasEmergencyMedia
+        ? [
+            PlaylistItem(
+              filename: _emergencyMediaFilename!,
+              type: MediaUtils.getMediaType(_emergencyMediaFilename!),
+              durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
+            ).toJson()
+          ]
+        : _playlist.map((i) => i.toJson()).toList();
+
     return {
       'app': SignageProtocol.appId,
       'protocol': SignageProtocol.protocolVersion,
-      'version': _playlistVersion,
+      'version': _playlistVersion + (_emergencyActive ? 10000 : 0),
       'serverTime': _nowMs,
-      'live': !_isStopped,
-      'stopped': _isStopped,
-      'paused': _isPaused,
+      'live': true,
+      'stopped': false,
+      'paused': false,
       'volume': _volume,
-      'currentFilename': _isStopped ? null : _currentFilename,
+      'currentFilename': effectiveCurrentFilename,
       'currentPosition': pos ~/ 1000,
       'currentPositionMs': pos,
-      'currentDurationMs': item == null ? 0 : _effectiveDurationMs(item),
-      'nextFilename': _isStopped ? null : _nextFilename,
-      'jumpToSeq': _jumpSeq,
-      'jumpToFilename': _isStopped ? null : _currentFilename,
+      'currentDurationMs': hasEmergencyMedia ? 3600000 : (item == null ? 0 : _effectiveDurationMs(item)),
+      'nextFilename': hasEmergencyMedia ? _emergencyMediaFilename : (_isStopped ? null : _nextFilename),
+      'jumpToSeq': _jumpSeq + (_emergencyActive ? 1000 : 0),
+      'jumpToFilename': effectiveCurrentFilename,
       'seekSeq': _seekSeq,
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
       'repeatOne': _repeatOne,
-      'emergency': _buildEmergencyJson(),
-      'emergencyItem': (_emergencyActive && _emergencyMediaFilename != null)
+      'emergency': {
+        'active': hasEmergencyMedia ? false : _emergencyActive, // Set to false when poster media is present so TV doesn't cover poster with text overlay!
+        'message': _emergencyMessage,
+        'mediaFilename': _emergencyMediaFilename,
+        'filename': _emergencyMediaFilename,
+        'image': _emergencyMediaFilename,
+        'file': _emergencyMediaFilename,
+        'media': _emergencyMediaFilename,
+        'mediaUrl': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
+        'imageUrl': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
+        'url': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
+        'seq': _emergencySeq,
+        'durationSeconds': _emergencyDurationSeconds,
+        'remainingSeconds': _emergencyRemainingSeconds,
+      },
+      'emergencyItem': hasEmergencyMedia
           ? PlaylistItem(
               filename: _emergencyMediaFilename!,
               type: MediaUtils.getMediaType(_emergencyMediaFilename!),
               durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
             ).toJson()
           : null,
-      'items': _playlist.map((i) => i.toJson()).toList(),
+      'items': effectiveItems,
     };
   }
 
