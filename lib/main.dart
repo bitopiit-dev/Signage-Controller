@@ -332,6 +332,8 @@ class _ControllerScreenState extends State<ControllerScreen>
   final Set<String> _knownOffline = {};
   String _deviceFilter = 'total';
 
+  Uint8List? _lastScreenShareBytes;
+
   Timer? _tickTimer;
   Timer? _saveDebounce;
 
@@ -345,6 +347,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       _tickAutoplay();
       _tickDevices();
       _checkEmergencyTimer();
+      if (_screenSharingActive) _screenSharingSeq++;
       setState(() {});
     });
   }
@@ -2115,6 +2118,28 @@ class _ControllerScreenState extends State<ControllerScreen>
 
         // Directly serve any file in the media directory
         final targetFile = File(p.join(_mediaDir, cleanPath));
+        if (cleanPath == 'screen_frame.jpg' || cleanPath.startsWith('screen_frame')) {
+          try {
+            if (await targetFile.exists()) {
+              final bytes = await targetFile.readAsBytes();
+              if (bytes.isNotEmpty) _lastScreenShareBytes = bytes;
+            }
+          } catch (_) {}
+          if (_lastScreenShareBytes != null && _lastScreenShareBytes!.isNotEmpty) {
+            return Response.ok(
+              _lastScreenShareBytes!,
+              headers: {
+                'Content-Type': 'image/jpeg',
+                'Content-Length': '${_lastScreenShareBytes!.length}',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'Access-Control-Allow-Origin': '*',
+              },
+            );
+          }
+        }
+
         if (await targetFile.exists()) {
           final length = await targetFile.length();
           final contentType = _getContentType(cleanPath);

@@ -336,7 +336,7 @@ class _DeviceControlCard extends StatelessWidget {
     final volume = ((commands['volume'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0);
     final inSync = currentFilename != null &&
         device.filename == currentFilename &&
-        (device.positionMs - masterPositionMs).abs() < 4000;
+        ((device.positionMs - masterPositionMs).abs() < 4000 || currentFilename == 'screen_frame.jpg');
     final id = device.id;
 
     return AnimatedOpacity(
