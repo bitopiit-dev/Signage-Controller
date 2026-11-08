@@ -16,6 +16,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'models/playlist_item.dart';
 import 'models/device_status.dart';
 import 'utils/media_utils.dart';
+import 'utils/transcoder.dart';
 import 'core/theme.dart';
 import 'core/constants.dart';
 import 'components/app_header.dart';
@@ -81,6 +82,10 @@ class _ControllerScreenState extends State<ControllerScreen>
   final Set<int> _selectedIndices = {};
   bool _busyImporting = false;
 
+  // ── Video conversion (ffmpeg) ────────────────────────────
+  FfmpegTools? _ffmpeg;
+  TranscodeQueue? _transcoder;
+
   // ── Master playback state (the single source of truth) ───
   bool _isStopped = true;
   bool _isPaused = false;
@@ -134,9 +139,13 @@ class _ControllerScreenState extends State<ControllerScreen>
 
   Future<void> _initApp() async {
     await _setupMediaDir();
+    await _setupTranscoder();
     await _detectIp();
     await _startServer();
     await _startDiscoveryResponder();
+    // Check existing videos in the background and convert any that TVs
+    // cannot play (also fixes their durations).
+    unawaited(_checkExistingVideos());
     // Signage should come back on air by itself after a restart.
     if (_playlist.isNotEmpty) {
       _playFileAtIndex(0, reason: 'Auto-start');
@@ -146,6 +155,7 @@ class _ControllerScreenState extends State<ControllerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _transcoder?.cancelAll();
     _server?.close(force: true);
     _discoverySocket?.close();
     _tickTimer?.cancel();
@@ -495,6 +505,13 @@ class _ControllerScreenState extends State<ControllerScreen>
     await for (final f in dir.list()) {
       if (f is File) {
         final name = p.basename(f.path);
+        if (name.startsWith('.') && name.endsWith('.part')) {
+          // Leftover from an interrupted conversion.
+          try {
+            await f.delete();
+          } catch (_) {}
+          continue;
+        }
         if (name == 'playlist.json' || name.startsWith('.')) continue;
         filesOnDisk[name] = f.path;
       }
@@ -561,10 +578,18 @@ class _ControllerScreenState extends State<ControllerScreen>
     if (result == null) return;
     setState(() => _busyImporting = true);
     var added = 0;
+    var queued = 0;
     try {
       for (final file in result.files) {
         if (file.path == null) continue;
         final name = file.name;
+        // Videos are converted (if needed) straight from where they are,
+        // so even multi-GB movies are never copied twice.
+        if (MediaUtils.getMediaType(name) == MediaType.video && _transcoder != null) {
+          _queueConversion(file.path!);
+          queued++;
+          continue;
+        }
         final dest = p.join(_mediaDir, name);
         if (p.normalize(file.path!) != p.normalize(dest)) {
           await File(file.path!).copy(dest);
@@ -587,6 +612,9 @@ class _ControllerScreenState extends State<ControllerScreen>
       _toast('Import failed: $e');
     } finally {
       setState(() => _busyImporting = false);
+    }
+    if (queued > 0) {
+      _toast('$queued video(s) are being prepared for the TVs – progress is shown in the library');
     }
     if (added > 0) {
       _playlistChanged();
@@ -809,16 +837,18 @@ class _ControllerScreenState extends State<ControllerScreen>
     );
     if (ok != true) return;
     final names = _selectedIndices.map((i) => _playlist[i]).toList();
+    final removeNames = names.map((e) => e.filename).toSet();
+    final t = _transcoder;
+    if (t != null) {
+      for (final j in List<TranscodeJob>.from(t.jobs)) {
+        if (j.isActive && j.replaces != null && removeNames.contains(j.replaces)) t.cancel(j);
+      }
+    }
     var removedCurrent = false;
     for (final item in names) {
       if (item.filename == _currentFilename) removedCurrent = true;
       if (item.type != MediaType.youtube) {
-        try {
-          final f = File(p.join(_mediaDir, item.filename));
-          if (await f.exists()) await f.delete();
-        } catch (e) {
-          debugPrint('Delete failed: $e');
-        }
+        await _deleteMediaFile(item.filename);
       }
       _reportedDurationsMs.remove(item.filename);
     }
@@ -844,6 +874,251 @@ class _ControllerScreenState extends State<ControllerScreen>
       _selectedIndices.clear();
       if (all) _selectedIndices.addAll(List.generate(_playlist.length, (i) => i));
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  VIDEO CONVERSION
+  // ═══════════════════════════════════════════════════════════
+
+  Future<void> _setupTranscoder() async {
+    if (_mediaDir.isEmpty) return;
+    // Also look in Documents\signage_controller\ffmpeg
+    final appData = p.dirname(_mediaDir);
+    final tools = await FfmpegTools.locate(extraDirs: [p.join(appData, 'ffmpeg')]);
+    if (tools == null) {
+      _log('ffmpeg not found – videos are added without conversion', AppColors.warningAmber);
+      return;
+    }
+    _ffmpeg = tools;
+    _transcoder = TranscodeQueue(
+      tools: tools,
+      mediaDir: _mediaDir,
+      onUpdate: (_) {
+        if (mounted) setState(() {});
+      },
+      onDone: _onConversionDone,
+      onFailed: (job) {
+        _log('Conversion failed: ${job.displayName}', AppColors.dangerRose);
+        if (mounted) setState(() {});
+      },
+    );
+    _log('Video converter ready (ffmpeg)', AppColors.successEmerald);
+  }
+
+  String _uniqueTargetName(String sourceName) {
+    final base = p.basenameWithoutExtension(sourceName);
+    bool taken(String n) =>
+        _playlist.any((i) => i.filename == n) ||
+        File(p.join(_mediaDir, n)).existsSync() ||
+        (_transcoder?.isTargetTaken(n) ?? false);
+    var name = '$base.mp4';
+    var n = 2;
+    while (taken(name)) {
+      name = '$base ($n).mp4';
+      n++;
+    }
+    return name;
+  }
+
+  void _queueConversion(String sourcePath, {String? replaces}) {
+    final t = _transcoder;
+    if (t == null) return;
+    t.add(sourcePath, _uniqueTargetName(p.basename(sourcePath)), replaces: replaces);
+    _log('Preparing for TVs: ${p.basename(sourcePath)}', AppColors.accentCyan);
+  }
+
+  void _onConversionDone(TranscodeJob job, String outputPath) {
+    if (!mounted) return;
+    final item = PlaylistItem(
+      filename: job.targetName,
+      type: MediaType.video,
+      durationSeconds: max(1, job.outputDurationSec.round()),
+    );
+    var wasCurrent = false;
+    setState(() {
+      _reportedDurationsMs.remove(job.targetName);
+      final idx = job.replaces == null ? -1 : _playlist.indexWhere((i) => i.filename == job.replaces);
+      if (idx != -1) {
+        final old = _playlist[idx];
+        wasCurrent = !_isStopped && old.filename == _currentFilename;
+        _playlist[idx] = item.copyWith(volume: old.volume, transition: old.transition);
+        _reportedDurationsMs.remove(old.filename);
+      } else {
+        final existing = _playlist.indexWhere((i) => i.filename == job.targetName);
+        if (existing != -1) {
+          _playlist[existing] = item;
+        } else {
+          _playlist.add(item);
+        }
+      }
+    });
+    if (job.replaces != null && job.replaces != job.targetName) {
+      _deleteMediaFile(job.replaces!);
+    }
+    _playlistChanged();
+    _log('Ready for TVs: ${job.targetName}', AppColors.successEmerald);
+    if (wasCurrent) {
+      _playFileAtIndex(_playlist.indexWhere((i) => i.filename == job.targetName), reason: 'Now playing');
+    } else if (_isStopped && _playlist.length == 1) {
+      _playFileAtIndex(0, reason: 'Go live');
+    }
+  }
+
+  /// Deletes a media file. Windows refuses while a TV is still streaming
+  /// it, so keep retrying for a while.
+  Future<void> _deleteMediaFile(String name, [int attempt = 0]) async {
+    try {
+      final f = File(p.join(_mediaDir, name));
+      if (await f.exists()) await f.delete();
+    } catch (e) {
+      if (attempt < 20) {
+        Timer(const Duration(seconds: 30), () => _deleteMediaFile(name, attempt + 1));
+      } else {
+        debugPrint('Delete failed: $e');
+      }
+    }
+  }
+
+  Future<void> _checkExistingVideos() async {
+    final tools = _ffmpeg;
+    final t = _transcoder;
+    if (tools == null || t == null) return;
+    final videos = _playlist.where((i) => i.type == MediaType.video || i.type == MediaType.movie).toList();
+    var queued = 0;
+    var changed = false;
+    for (final item in videos) {
+      if (t.jobs.any((j) => j.isActive && j.replaces == item.filename)) continue;
+      final path = p.join(_mediaDir, item.filename);
+      if (!await File(path).exists()) continue;
+      final info = await probeMedia(tools, path);
+      if (info == null) continue;
+      if (!info.playableAsIs) {
+        _log('Not TV-safe (${info.describe()}): ${item.filename}', AppColors.warningAmber);
+        _queueConversion(path, replaces: item.filename);
+        queued++;
+      } else if (info.durationSec > 0) {
+        // Exact length (Windows cannot read it through video_player).
+        final secs = max(1, info.durationSec.round());
+        final idx = _playlist.indexWhere((i) => i.filename == item.filename);
+        if (idx != -1 && _playlist[idx].durationSeconds != secs) {
+          _playlist[idx] = _playlist[idx].copyWith(durationSeconds: secs);
+          changed = true;
+        }
+      }
+    }
+    if (changed && mounted) _playlistChanged();
+    if (queued > 0) _log('$queued existing video(s) are being converted for TVs', AppColors.warningAmber);
+  }
+
+  Widget? _buildJobsPanel() {
+    final t = _transcoder;
+    if (t == null || t.jobs.isEmpty) return null;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 6, AppSpacing.s2, 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(AppRadius.standard),
+        border: Border.all(color: AppColors.glassWhite),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            const Icon(Icons.movie_filter_rounded, size: 16, color: AppColors.accentCyan),
+            const SizedBox(width: 8),
+            Expanded(child: _label('PREPARING VIDEOS FOR TVs (${t.activeJobs.length})')),
+            if (t.jobs.any((j) => !j.isActive))
+              TextButton(
+                onPressed: () => setState(t.clearFinished),
+                child: const Text('CLEAR', style: TextStyle(fontSize: 10)),
+              ),
+          ]),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 180),
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              children: [for (final j in t.jobs) _jobRow(j)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _jobRow(TranscodeJob j) {
+    var status = '';
+    var color = Colors.white54;
+    switch (j.status) {
+      case JobStatus.queued:
+        status = 'Waiting…';
+        break;
+      case JobStatus.analyzing:
+        status = 'Checking file…';
+        break;
+      case JobStatus.converting:
+        final eta = j.eta;
+        status = '${j.mode} ${(j.progress * 100).floor()}%${eta == null ? '' : ' · ~${_fmtEta(eta)} left'}';
+        color = AppColors.accentCyan;
+        break;
+      case JobStatus.finalizing:
+        status = 'Finishing…';
+        color = AppColors.accentCyan;
+        break;
+      case JobStatus.done:
+        status = 'Ready';
+        color = AppColors.successEmerald;
+        break;
+      case JobStatus.failed:
+        status = j.error ?? 'Failed';
+        color = AppColors.dangerRose;
+        break;
+      case JobStatus.cancelled:
+        status = 'Cancelled';
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Text(j.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+            if (j.isActive)
+              InkWell(
+                onTap: () => _transcoder?.cancel(j),
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(Icons.close_rounded, size: 14, color: Colors.white38),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 4),
+          if (j.isActive)
+            LinearProgressIndicator(
+              value: j.status == JobStatus.converting && j.progress > 0 ? j.progress : null,
+              minHeight: 3,
+              color: AppColors.accentCyan,
+              backgroundColor: Colors.white10,
+            ),
+          const SizedBox(height: 3),
+          Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: color)),
+        ],
+      ),
+    );
+  }
+
+  String _fmtEta(Duration d) {
+    if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes.remainder(60)}m';
+    if (d.inMinutes > 0) return '${d.inMinutes}m';
+    return '${d.inSeconds}s';
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1178,18 +1453,27 @@ class _ControllerScreenState extends State<ControllerScreen>
           existing.updateFrom(data, ip, now);
         }
         // Screens know the real length of video/audio/YouTube items.
+        // Only trust a report while the screen is actually playing the
+        // current item, and never accept a length shorter than the position
+        // already reached. Keep the longest value seen, so one bad report
+        // (e.g. while a video is still loading) cannot cut playback short.
         final fn = data['filename'] as String?;
-        final durMs = (data['durationMs'] as num?)?.toInt() ?? (((data['duration'] as num?)?.toInt() ?? 0) * 1000);
-        if (fn != null && durMs > 1000) {
+        final state = (data['state'] ??
+                (data['isPaused'] == true ? 'paused' : 'playing'))
+            .toString();
+        final posMs = (data['positionMs'] as num?)?.toInt() ??
+            (((data['position'] as num?)?.toInt() ?? 0) * 1000);
+        final durMs = (data['durationMs'] as num?)?.toInt() ??
+            (((data['duration'] as num?)?.toInt() ?? 0) * 1000);
+        if (fn != null &&
+            fn == _currentFilename &&
+            state == 'playing' &&
+            durMs > 1000 &&
+            durMs >= posMs) {
           final item = _playlist.where((i) => i.filename == fn).toList();
           if (item.isNotEmpty && item.first.isTimeBased) {
-            final prev = _reportedDurationsMs[fn];
-            _reportedDurationsMs[fn] = durMs;
-            if (prev == null && (item.first.durationSeconds - durMs ~/ 1000).abs() > 2) {
-              final idx = _playlist.indexOf(item.first);
-              _playlist[idx] = item.first.copyWith(durationSeconds: max(1, durMs ~/ 1000));
-              _scheduleSave();
-            }
+            final prev = _reportedDurationsMs[fn] ?? 0;
+            _reportedDurationsMs[fn] = max(prev, durMs);
           }
         }
       });
@@ -1411,6 +1695,7 @@ class _ControllerScreenState extends State<ControllerScreen>
                     onAddMedia: _pickFiles,
                     onAddYoutube: _addYoutubeLink,
                     onEditItem: _editItem,
+                    jobsPanel: _buildJobsPanel(),
                   ),
                   CommandCenterMonitor(
                     jumpToFilename: _isStopped ? null : _currentFilename,

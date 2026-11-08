@@ -28,6 +28,9 @@ class EnterpriseLibrary extends StatefulWidget {
   final VoidCallback onAddYoutube;
   final Function(int)? onEditItem;
 
+  /// Optional panel shown above the list (video conversion progress).
+  final Widget? jobsPanel;
+
   const EnterpriseLibrary({
     super.key,
     this.width = 400,
@@ -46,6 +49,7 @@ class EnterpriseLibrary extends StatefulWidget {
     required this.onAddMedia,
     required this.onAddYoutube,
     this.onEditItem,
+    this.jobsPanel,
   });
 
   @override
@@ -113,6 +117,7 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
                   color: AppColors.accentCyan,
                   backgroundColor: Colors.transparent,
                 ),
+              if (widget.jobsPanel != null) widget.jobsPanel!,
               Expanded(
                 child: widget.playlist.isEmpty
                     ? _EmptyLibrary(onAdd: widget.onAddMedia)

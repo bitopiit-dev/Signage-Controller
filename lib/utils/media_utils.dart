@@ -4,7 +4,10 @@ import 'package:video_player/video_player.dart';
 import '../models/playlist_item.dart';
 
 class MediaUtils {
-  static const List<String> videoExtensions = ['mp4', 'mkv', 'mov', 'avi', 'webm', '3gp', 'm4v', 'ts'];
+  static const List<String> videoExtensions = [
+    'mp4', 'mkv', 'mov', 'avi', 'webm', '3gp', 'm4v', 'ts', 'wmv', 'flv', 'mpg', 'mpeg',
+    'vob', 'mts', 'm2ts', 'ogv', 'divx', 'rmvb', 'rm', 'f4v', 'asf', 'mxf', 'dv', 'hevc',
+  ];
   static const List<String> imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
   static const List<String> audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'];
   static const List<String> pdfExtensions = ['pdf'];
