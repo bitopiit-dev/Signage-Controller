@@ -307,6 +307,120 @@ class TranscodeQueue {
 
   String _tempPath(TranscodeJob job) => p.join(mediaDir, '.${job.targetName}.part');
 
+  Future<int> _execFfmpegPass({
+    required TranscodeJob job,
+    required String tempPath,
+    required ProbeResult info,
+    required String filterGraph,
+    required bool copyVideo,
+    required bool copyAudio,
+    required bool allowGpu,
+    required List<String> errTailOut,
+  }) async {
+    List<String> videoArgs;
+    if (copyVideo) {
+      job.mode = copyAudio ? 'Fast Stream Copy (Instant)' : 'Converting audio';
+      videoArgs = ['-c:v', 'copy'];
+    } else if (allowGpu && tools.hasNvenc) {
+      job.mode = 'Hardware GPU Transcode (NVIDIA NVENC)';
+      videoArgs = [
+        '-c:v', 'h264_nvenc',
+        '-preset', 'p1',
+        '-profile:v', 'main',
+        '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+        '-vf', filterGraph,
+      ];
+    } else if (allowGpu && tools.hasQsv) {
+      job.mode = 'Hardware Transcode (Intel QuickSync)';
+      videoArgs = [
+        '-c:v', 'h264_qsv',
+        '-preset', 'veryfast',
+        '-profile:v', 'main',
+        '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+        '-vf', filterGraph,
+      ];
+    } else if (allowGpu && tools.hasAmf) {
+      job.mode = 'Hardware GPU Transcode (AMD AMF)';
+      videoArgs = [
+        '-c:v', 'h264_amf',
+        '-usage', 'ultrafast',
+        '-profile:v', 'main',
+        '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+        '-vf', filterGraph,
+      ];
+    } else {
+      job.mode = 'Ultrafast Multi-Core CPU Transcode';
+      videoArgs = [
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'fastdecode',
+        '-threads', '0',
+        '-profile:v', 'main',
+        '-level:v', '4.0',
+        '-crf', '22',
+        '-maxrate', '6M',
+        '-bufsize', '12M',
+        '-g', '60',
+        '-vf', filterGraph,
+      ];
+    }
+
+    final args = <String>[
+      '-hide_banner', '-nostdin', '-y',
+      '-i', job.sourcePath,
+      '-map', '0:v:0', '-map', '0:a:0?',
+      '-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1',
+      ...videoArgs,
+      if (copyAudio) ...['-c:a', 'copy'] else ...['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100'],
+      '-movflags', '+faststart',
+      '-f', 'mp4',
+      '-progress', 'pipe:1', '-nostats',
+      tempPath,
+    ];
+
+    job.status = JobStatus.converting;
+    job.startedAt = DateTime.now();
+    onUpdate(job);
+
+    final proc = await Process.start(tools.ffmpeg, args);
+    job._process = proc;
+    final errSub = proc.stderr
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .transform(const LineSplitter())
+        .listen((line) {
+      errTailOut.add(line);
+      if (errTailOut.length > 15) errTailOut.removeAt(0);
+    });
+    final total = info.durationSec;
+    var lastUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+    final outSub = proc.stdout
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .transform(const LineSplitter())
+        .listen((line) {
+      if (line.startsWith('out_time_us=') || line.startsWith('out_time_ms=')) {
+        final us = int.tryParse(line.split('=').last) ?? 0;
+        if (total > 0 && us > 0) {
+          job.progress = (us / 1e6 / total).clamp(0.0, 0.99);
+        }
+        final now = DateTime.now();
+        if (now.difference(lastUpdate).inMilliseconds > 700) {
+          lastUpdate = now;
+          onUpdate(job);
+        }
+      } else if (line == 'progress=end') {
+        job.status = JobStatus.finalizing;
+        job.progress = 0.99;
+        onUpdate(job);
+      }
+    });
+
+    final code = await proc.exitCode;
+    await outSub.cancel();
+    await errSub.cancel();
+    job._process = null;
+    return code;
+  }
+
   Future<void> _run(TranscodeJob job) async {
     final temp = _tempPath(job);
     try {
@@ -320,116 +434,41 @@ class TranscodeQueue {
       final copyAudio = info.audioCompatible;
 
       final vf = StringBuffer(
-          "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1");
+          "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p,setsar=1");
       if (info.fps > 30.5) vf.write(',fps=30');
 
-      List<String> videoArgs;
-      if (copyVideo) {
-        job.mode = copyAudio ? 'Fast Stream Copy (Instant)' : 'Converting audio';
-        videoArgs = ['-c:v', 'copy'];
-      } else if (tools.hasNvenc) {
-        job.mode = 'Hardware GPU Transcode (NVIDIA NVENC)';
-        videoArgs = [
-          '-c:v', 'h264_nvenc',
-          '-preset', 'p1', // Fastest NVENC speed
-          '-profile:v', 'main',
-          '-pix_fmt', 'yuv420p',
-          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
-          '-vf', vf.toString(),
-        ];
-      } else if (tools.hasQsv) {
-        job.mode = 'Hardware Transcode (Intel QuickSync)';
-        videoArgs = [
-          '-c:v', 'h264_qsv',
-          '-preset', 'veryfast',
-          '-profile:v', 'main',
-          '-pix_fmt', 'yuv420p',
-          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
-          '-vf', vf.toString(),
-        ];
-      } else if (tools.hasAmf) {
-        job.mode = 'Hardware GPU Transcode (AMD AMF)';
-        videoArgs = [
-          '-c:v', 'h264_amf',
-          '-usage', 'ultrafast',
-          '-profile:v', 'main',
-          '-pix_fmt', 'yuv420p',
-          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
-          '-vf', vf.toString(),
-        ];
-      } else {
-        job.mode = 'Ultrafast Multi-Core CPU Transcode';
-        videoArgs = [
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-tune', 'fastdecode',
-          '-threads', '0',
-          '-profile:v', 'main',
-          '-level:v', '4.0',
-          '-pix_fmt', 'yuv420p',
-          '-crf', '22',
-          '-maxrate', '6M',
-          '-bufsize', '12M',
-          '-g', '60',
-          '-vf', vf.toString(),
-        ];
-      }
-
-      final args = <String>[
-        '-hide_banner', '-nostdin', '-y',
-        '-i', job.sourcePath,
-        '-map', '0:v:0', '-map', '0:a:0?',
-        '-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1',
-        ...videoArgs,
-        if (copyAudio) ...['-c:a', 'copy'] else ...['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100'],
-        '-movflags', '+faststart',
-        '-f', 'mp4',
-        '-progress', 'pipe:1', '-nostats',
-        temp,
-      ];
-
-      job.status = JobStatus.converting;
-      job.startedAt = DateTime.now();
-      onUpdate(job);
-
-      final proc = await Process.start(tools.ffmpeg, args);
-      job._process = proc;
       final errTail = <String>[];
-      final errSub = proc.stderr
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter())
-          .listen((line) {
-        errTail.add(line);
-        if (errTail.length > 15) errTail.removeAt(0);
-      });
-      final total = info.durationSec;
-      var lastUpdate = DateTime.fromMillisecondsSinceEpoch(0);
-      final outSub = proc.stdout
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter())
-          .listen((line) {
-        if (line.startsWith('out_time_us=') || line.startsWith('out_time_ms=')) {
-          final us = int.tryParse(line.split('=').last) ?? 0;
-          if (total > 0 && us > 0) {
-            job.progress = (us / 1e6 / total).clamp(0.0, 0.99);
-          }
-          final now = DateTime.now();
-          if (now.difference(lastUpdate).inMilliseconds > 700) {
-            lastUpdate = now;
-            onUpdate(job);
-          }
-        } else if (line == 'progress=end') {
-          // Moving the index to the front can take a while on big files.
-          job.status = JobStatus.finalizing;
-          job.progress = 0.99;
-          onUpdate(job);
-        }
-      });
 
-      final code = await proc.exitCode;
-      await outSub.cancel();
-      await errSub.cancel();
-      job._process = null;
+      // Attempt 1: Primary Transcode (using GPU acceleration if available)
+      int code = await _execFfmpegPass(
+        job: job,
+        tempPath: temp,
+        info: info,
+        filterGraph: vf.toString(),
+        copyVideo: copyVideo,
+        copyAudio: copyAudio,
+        allowGpu: true,
+        errTailOut: errTail,
+      );
+
+      // Attempt 2: If GPU transcode failed, automatically fall back to Ultrafast CPU Transcode
+      if (code != 0 && !job._cancelRequested && !copyVideo && (tools.hasNvenc || tools.hasQsv || tools.hasAmf)) {
+        errTail.clear();
+        try {
+          final t = File(temp);
+          if (await t.exists()) await t.delete();
+        } catch (_) {}
+        code = await _execFfmpegPass(
+          job: job,
+          tempPath: temp,
+          info: info,
+          filterGraph: vf.toString(),
+          copyVideo: false,
+          copyAudio: copyAudio,
+          allowGpu: false,
+          errTailOut: errTail,
+        );
+      }
 
       if (job._cancelRequested) throw _Cancelled();
       if (code != 0) {
