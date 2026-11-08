@@ -2113,7 +2113,11 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
         (((data['position'] as num?)?.toInt() ?? 0) * 1000);
     final String? deviceFn = data['filename'] as String?;
 
-    // Auto Drift Correction: If TV is playing the master file but drifted by > 1.2s, force TV seek to master position
+    // High-frequency polling interval hint for TVs (300ms)
+    commands['pollIntervalMs'] = 300;
+    commands['targetPollIntervalMs'] = 300;
+
+    // Ultra-Low Latency Auto Drift Correction (Sub-Second 400ms Threshold)
     if (devSync &&
         deviceFn != null &&
         deviceFn == _currentFilename &&
@@ -2122,13 +2126,28 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
         !_isStopped &&
         !_screenSharingActive &&
         !_emergencyActive) {
-      final int driftMs = (devicePos - masterPos).abs();
-      if (driftMs > 1200) {
-        commands['seekToMs'] = masterPos;
-        commands['seekTo'] = masterPos;
-        commands['seekSeq'] = (_syncSeq * 1000) + (masterPos ~/ 500);
+      final int rawDriftMs = devicePos - masterPos; // positive = TV ahead, negative = TV behind
+      final int absDriftMs = rawDriftMs.abs();
+
+      if (absDriftMs > 400) {
+        // Network travel time compensation (+25ms offset)
+        final int targetPos = masterPos + 25;
+        commands['seekToMs'] = targetPos;
+        commands['seekTo'] = targetPos;
+        commands['seekSeq'] = (_syncSeq * 10000) + (targetPos ~/ 200);
         commands['forceSync'] = true;
+        
+        // Speed nudge for smooth sub-second catches without audio pops
+        if (absDriftMs < 1200) {
+          commands['playbackSpeed'] = rawDriftMs < 0 ? 1.05 : 0.95;
+        } else {
+          commands['playbackSpeed'] = 1.0;
+        }
+      } else {
+        commands['playbackSpeed'] = 1.0;
       }
+    } else {
+      commands['playbackSpeed'] = 1.0;
     }
 
     if (_screenSharingActive && devSync) {
