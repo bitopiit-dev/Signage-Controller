@@ -1575,12 +1575,13 @@ class _ControllerScreenState extends State<ControllerScreen>
   }
 
   Map<String, dynamic> _buildEmergencyJson() {
+    final bool hasEmergencyMedia = _emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty;
     final fn = _emergencyActive ? _emergencyMediaFilename : null;
     final mediaUrl = (fn != null && fn.isNotEmpty)
         ? 'http://$_localIp:$_activePort/$fn'
         : null;
     return {
-      'active': _emergencyActive,
+      'active': hasEmergencyMedia ? false : _emergencyActive, // Must be false when poster image is attached so TV doesn't draw its text-only Evacuation Overlay!
       'message': _emergencyMessage,
       'mediaFilename': fn,
       'filename': fn,
@@ -1639,21 +1640,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
       'repeatOne': _repeatOne,
-      'emergency': {
-        'active': hasEmergencyMedia ? false : _emergencyActive, // Set to false when poster media is present so TV doesn't cover poster with text overlay!
-        'message': _emergencyMessage,
-        'mediaFilename': _emergencyMediaFilename,
-        'filename': _emergencyMediaFilename,
-        'image': _emergencyMediaFilename,
-        'file': _emergencyMediaFilename,
-        'media': _emergencyMediaFilename,
-        'mediaUrl': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
-        'imageUrl': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
-        'url': hasEmergencyMedia ? 'http://$_localIp:$_activePort/$_emergencyMediaFilename' : null,
-        'seq': _emergencySeq,
-        'durationSeconds': _emergencyDurationSeconds,
-        'remainingSeconds': _emergencyRemainingSeconds,
-      },
+      'emergency': _buildEmergencyJson(),
       'emergencyItem': hasEmergencyMedia
           ? PlaylistItem(
               filename: _emergencyMediaFilename!,
@@ -1739,10 +1726,16 @@ class _ControllerScreenState extends State<ControllerScreen>
         }
       });
     }
+    final commands = Map<String, dynamic>.from(_commandsFor(id));
+    if (_emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty) {
+      commands['jumpTo'] = _emergencyMediaFilename;
+      commands['jumpToFilename'] = _emergencyMediaFilename;
+      commands['currentFilename'] = _emergencyMediaFilename;
+    }
     return Response.ok(
       jsonEncode({
         'ok': true,
-        'commands': _commandsFor(id),
+        'commands': commands,
         'serverTime': now,
         'emergency': _buildEmergencyJson(),
       }),
