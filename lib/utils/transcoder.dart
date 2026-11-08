@@ -65,13 +65,18 @@ class FfmpegTools {
 
   static Future<Set<String>> _detectEncoders(String ffmpegPath) async {
     final supported = <String>{};
-    try {
-      final res = await Process.run(ffmpegPath, ['-hide_banner', '-encoders']);
-      final out = '${res.stdout}';
-      if (out.contains('h264_nvenc')) supported.add('h264_nvenc');
-      if (out.contains('h264_qsv')) supported.add('h264_qsv');
-      if (out.contains('h264_amf')) supported.add('h264_amf');
-    } catch (_) {}
+    final candidates = ['h264_amf', 'h264_nvenc', 'h264_qsv'];
+    for (final enc in candidates) {
+      try {
+        final res = await Process.run(
+          ffmpegPath,
+          ['-hide_banner', '-f', 'lavfi', '-i', 'nullsrc=size=640x360', '-c:v', enc, '-vframes', '1', '-f', 'null', '-'],
+        ).timeout(const Duration(seconds: 2));
+        if (res.exitCode == 0) {
+          supported.add(enc);
+        }
+      } catch (_) {}
+    }
     return supported;
   }
 }
@@ -245,7 +250,6 @@ class TranscodeQueue {
   final void Function(TranscodeJob job) onFailed;
 
   final List<TranscodeJob> jobs = [];
-  bool _running = false;
   int _counter = 0;
 
   TranscodeQueue({
@@ -291,17 +295,19 @@ class TranscodeQueue {
   /// Forget finished jobs so the panel only shows current work.
   void clearFinished() => jobs.removeWhere((j) => !j.isActive);
 
-  Future<void> _pump() async {
-    if (_running) return;
-    _running = true;
-    try {
-      while (true) {
-        final next = jobs.where((j) => j.status == JobStatus.queued).toList();
-        if (next.isEmpty) break;
-        await _run(next.first);
-      }
-    } finally {
-      _running = false;
+  int _activeWorkerCount = 0;
+  static const int _maxConcurrentJobs = 2;
+
+  void _pump() {
+    while (_activeWorkerCount < _maxConcurrentJobs) {
+      final next = jobs.where((j) => j.status == JobStatus.queued).toList();
+      if (next.isEmpty) break;
+      final job = next.first;
+      _activeWorkerCount++;
+      _run(job).whenComplete(() {
+        _activeWorkerCount--;
+        _pump();
+      });
     }
   }
 
