@@ -538,6 +538,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
       _isStopped = false;
       _isPaused = false;
       _jumpSeq++;
+      _syncSeq++;
       _selectedIndex = index;
       _nextFilename = _computeNextFilename();
     });
@@ -626,13 +627,22 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
   }
 
   void _forceSync() {
+    final masterPos = _currentPositionMs();
     setState(() {
       _syncSeq++;
+      _seekSeq++;
       _playlistVersion++;
+      for (final id in _devices.keys) {
+        final c = _commandsFor(id);
+        c['seekToMs'] = masterPos;
+        c['seekTo'] = masterPos;
+        c['seekSeq'] = (_syncSeq * 1000) + (masterPos ~/ 500);
+        c['syncSeq'] = _syncSeq;
+      }
     });
     _saveLibrary();
-    _log('Force sync sent to all screens', AppColors.successEmerald);
-    _toast('Force sync sent');
+    _log('Force sync sent to all screens (${formatSeconds(masterPos ~/ 1000)})', AppColors.successEmerald);
+    _toast('Synced all screens to ${formatSeconds(masterPos ~/ 1000)}');
   }
 
   void _setVolume(double v) {
@@ -2097,6 +2107,29 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     commands['stopped'] = effectiveStopped;
     commands['live'] = !effectiveStopped;
     commands['syncMaster'] = devSync;
+
+    final int masterPos = _currentPositionMs();
+    final int devicePos = (data['positionMs'] as num?)?.toInt() ??
+        (((data['position'] as num?)?.toInt() ?? 0) * 1000);
+    final String? deviceFn = data['filename'] as String?;
+
+    // Auto Drift Correction: If TV is playing the master file but drifted by > 1.2s, force TV seek to master position
+    if (devSync &&
+        deviceFn != null &&
+        deviceFn == _currentFilename &&
+        _currentFilename != null &&
+        !_isPaused &&
+        !_isStopped &&
+        !_screenSharingActive &&
+        !_emergencyActive) {
+      final int driftMs = (devicePos - masterPos).abs();
+      if (driftMs > 1200) {
+        commands['seekToMs'] = masterPos;
+        commands['seekTo'] = masterPos;
+        commands['seekSeq'] = (_syncSeq * 1000) + (masterPos ~/ 500);
+        commands['forceSync'] = true;
+      }
+    }
 
     if (_screenSharingActive && devSync) {
       commands['screenShareUrl'] = 'http://$_localIp:$_activePort/screen_frame.jpg';
