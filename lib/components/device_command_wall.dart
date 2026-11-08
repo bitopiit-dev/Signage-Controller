@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../models/device_status.dart';
 import '../models/playlist_item.dart';
+import '../utils/media_utils.dart';
 
 class DeviceCommandWall extends StatelessWidget {
   final double width;
@@ -214,36 +215,56 @@ class DeviceCommandWall extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 6, AppSpacing.s2, AppSpacing.s2),
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(AppRadius.large),
-        border: Border.all(color: AppColors.accentCyan.withOpacity(0.3), width: 1),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'Developed By K A Rahman',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.7),
-              letterSpacing: 0.5,
+      child: Tooltip(
+        message: 'Open https://bitopiit-dev.github.io/#top',
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.large),
+          child: InkWell(
+            onTap: () => MediaUtils.openUrl('https://bitopiit-dev.github.io/#top'),
+            borderRadius: BorderRadius.circular(AppRadius.large),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(AppRadius.large),
+                border: Border.all(color: AppColors.accentCyan.withOpacity(0.3), width: 1),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    'Developed By K A Rahman',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.7),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'BGL IT Signage',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.accentCyan,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.open_in_new_rounded, size: 10, color: AppColors.accentCyan),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 2),
-          const Text(
-            'BGL IT Signage',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: AppColors.accentCyan,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
