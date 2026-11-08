@@ -8,7 +8,17 @@ import 'package:path/path.dart' as p;
 class FfmpegTools {
   final String ffmpeg;
   final String ffprobe;
-  const FfmpegTools(this.ffmpeg, this.ffprobe);
+  final bool hasNvenc;
+  final bool hasQsv;
+  final bool hasAmf;
+
+  const FfmpegTools(
+    this.ffmpeg,
+    this.ffprobe, {
+    this.hasNvenc = false,
+    this.hasQsv = false,
+    this.hasAmf = false,
+  });
 
   /// Looks next to the app, in the given extra folders, then on PATH.
   static Future<FfmpegTools?> locate({List<String> extraDirs = const []}) async {
@@ -20,22 +30,49 @@ class FfmpegTools {
       p.join(appDir, 'ffmpeg', 'bin'),
       for (final d in extraDirs) ...[d, p.join(d, 'bin')],
     ];
+    String? foundFfmpeg;
+    String? foundFfprobe;
     for (final d in dirs) {
       final f = p.join(d, 'ffmpeg$exe');
       final pr = p.join(d, 'ffprobe$exe');
       if (await File(f).exists() && await File(pr).exists()) {
-        return FfmpegTools(f, pr);
+        foundFfmpeg = f;
+        foundFfprobe = pr;
+        break;
       }
     }
-    // Fall back to PATH.
+    if (foundFfmpeg == null || foundFfprobe == null) {
+      try {
+        final a = await Process.run('ffmpeg', ['-version']);
+        final b = await Process.run('ffprobe', ['-version']);
+        if (a.exitCode == 0 && b.exitCode == 0) {
+          foundFfmpeg = 'ffmpeg';
+          foundFfprobe = 'ffprobe';
+        }
+      } catch (_) {}
+    }
+    if (foundFfmpeg == null || foundFfprobe == null) return null;
+
+    final encoders = await _detectEncoders(foundFfmpeg);
+    return FfmpegTools(
+      foundFfmpeg,
+      foundFfprobe,
+      hasNvenc: encoders.contains('h264_nvenc'),
+      hasQsv: encoders.contains('h264_qsv'),
+      hasAmf: encoders.contains('h264_amf'),
+    );
+  }
+
+  static Future<Set<String>> _detectEncoders(String ffmpegPath) async {
+    final supported = <String>{};
     try {
-      final a = await Process.run('ffmpeg', ['-version']);
-      final b = await Process.run('ffprobe', ['-version']);
-      if (a.exitCode == 0 && b.exitCode == 0) {
-        return const FfmpegTools('ffmpeg', 'ffprobe');
-      }
+      final res = await Process.run(ffmpegPath, ['-hide_banner', '-encoders']);
+      final out = '${res.stdout}';
+      if (out.contains('h264_nvenc')) supported.add('h264_nvenc');
+      if (out.contains('h264_qsv')) supported.add('h264_qsv');
+      if (out.contains('h264_amf')) supported.add('h264_amf');
     } catch (_) {}
-    return null;
+    return supported;
   }
 }
 
@@ -73,19 +110,18 @@ class ProbeResult {
 
   bool get hasVideo => vCodec != null;
 
-  /// H.264 8-bit 4:2:0 Main/Baseline profile, at most 1080p30, level 4.0, <= 15 Mbit/s.
-  /// Enforcing Main or Baseline profile ensures hardware decoding compatibility across
-  /// 100% of Android TVs (including Triton, Fire TV, and low-end TV boxes that fail on High profile).
+  /// H.264 8-bit 4:2:0, at most 1080p30, level 4.1, <= 15 Mbit/s.
+  /// Standard 1080p MP4 videos match this and stream-copy in ~1 second.
   bool get videoCompatible {
     if (vCodec != 'h264') return false;
     if (pixFmt != 'yuv420p' && pixFmt != 'yuvj420p') return false;
     final prof = (vProfile ?? '').toLowerCase();
-    if (!(prof == 'main' || prof.contains('baseline'))) return false;
+    if (!(prof == 'main' || prof == 'high' || prof.contains('baseline'))) return false;
     final longSide = width > height ? width : height;
     final shortSide = width > height ? height : width;
     if (longSide > 1920 || shortSide > 1080) return false;
     if (fps > 30.5) return false;
-    if (level > 40) return false;
+    if (level > 41) return false;
     final br = vBitRate > 0 ? vBitRate : formatBitRate;
     if (br > 15000000) return false;
     return true;
@@ -282,28 +318,70 @@ class TranscodeQueue {
 
       final copyVideo = info.videoCompatible;
       final copyAudio = info.audioCompatible;
-      job.mode = copyVideo
-          ? (copyAudio ? 'Preparing for streaming' : 'Converting audio')
-          : 'Converting video';
 
       final vf = StringBuffer(
           "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1");
       if (info.fps > 30.5) vf.write(',fps=30');
+
+      List<String> videoArgs;
+      if (copyVideo) {
+        job.mode = copyAudio ? 'Fast Stream Copy (Instant)' : 'Converting audio';
+        videoArgs = ['-c:v', 'copy'];
+      } else if (tools.hasNvenc) {
+        job.mode = 'Hardware GPU Transcode (NVIDIA NVENC)';
+        videoArgs = [
+          '-c:v', 'h264_nvenc',
+          '-preset', 'p1', // Fastest NVENC speed
+          '-profile:v', 'main',
+          '-pix_fmt', 'yuv420p',
+          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+          '-vf', vf.toString(),
+        ];
+      } else if (tools.hasQsv) {
+        job.mode = 'Hardware Transcode (Intel QuickSync)';
+        videoArgs = [
+          '-c:v', 'h264_qsv',
+          '-preset', 'veryfast',
+          '-profile:v', 'main',
+          '-pix_fmt', 'yuv420p',
+          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+          '-vf', vf.toString(),
+        ];
+      } else if (tools.hasAmf) {
+        job.mode = 'Hardware GPU Transcode (AMD AMF)';
+        videoArgs = [
+          '-c:v', 'h264_amf',
+          '-usage', 'ultrafast',
+          '-profile:v', 'main',
+          '-pix_fmt', 'yuv420p',
+          '-b:v', '4M', '-maxrate', '8M', '-bufsize', '16M',
+          '-vf', vf.toString(),
+        ];
+      } else {
+        job.mode = 'Ultrafast Multi-Core CPU Transcode';
+        videoArgs = [
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-tune', 'fastdecode',
+          '-threads', '0',
+          '-profile:v', 'main',
+          '-level:v', '4.0',
+          '-pix_fmt', 'yuv420p',
+          '-crf', '22',
+          '-maxrate', '6M',
+          '-bufsize', '12M',
+          '-g', '60',
+          '-vf', vf.toString(),
+        ];
+      }
 
       final args = <String>[
         '-hide_banner', '-nostdin', '-y',
         '-i', job.sourcePath,
         '-map', '0:v:0', '-map', '0:a:0?',
         '-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1',
-        if (copyVideo) ...['-c:v', 'copy'] else ...[
-          '-c:v', 'libx264', '-preset', 'veryfast',
-          '-profile:v', 'main', '-level:v', '4.0',
-          '-pix_fmt', 'yuv420p',
-          '-crf', '21', '-maxrate', '6M', '-bufsize', '12M',
-          '-g', '60',
-          '-vf', vf.toString(),
-        ],
-        if (copyAudio) ...['-c:a', 'copy'] else ...['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-ar', '48000'],
+        ...videoArgs,
+        if (copyAudio) ...['-c:a', 'copy'] else ...['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100'],
         '-movflags', '+faststart',
         '-f', 'mp4',
         '-progress', 'pipe:1', '-nostats',
