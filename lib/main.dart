@@ -164,6 +164,27 @@ class _ControllerScreenState extends State<ControllerScreen>
     return [];
   }
 
+  Future<void> _ensureWindowVisible(String windowTitle) async {
+    if (!Platform.isWindows || windowTitle.isEmpty || windowTitle.contains('Entire Computer Screen')) return;
+    try {
+      final safeTitle = windowTitle.replaceAll("'", "''");
+      final script = '''
+\$code = @"
+using System;
+using System.Runtime.InteropServices;
+public class WinUtil {
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+"@
+Add-Type -TypeDefinition \$code -ErrorAction SilentlyContinue
+\$p = Get-Process | Where-Object { \$_.MainWindowTitle -like '*$safeTitle*' } | Select-Object -First 1
+if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
+''';
+      await Process.run('powershell', ['-Command', script]);
+    } catch (_) {}
+  }
+
   Future<void> _toggleScreenSharing() async {
     if (_screenSharingActive) {
       _stopScreenSharing();
@@ -272,6 +293,8 @@ class _ControllerScreenState extends State<ControllerScreen>
     );
 
     if (ok != true) return;
+
+    await _ensureWindowVisible(selectedTargetLabel);
 
     try {
       final targetPath = p.join(_mediaDir, 'screen_frame.jpg');
@@ -2341,6 +2364,8 @@ class _ControllerScreenState extends State<ControllerScreen>
                     emergencyMediaFilename: _emergencyMediaFilename,
                     emergencyRemainingSeconds: _emergencyRemainingSeconds,
                     screenSharingActive: _screenSharingActive,
+                    screenSharingTargetLabel: _screenSharingTargetLabel,
+                    onStopScreenShare: _stopScreenSharing,
                     monitorMuted: _monitorMuted,
                     onToggleMonitorMute: () {
                       setState(() => _monitorMuted = !_monitorMuted);
