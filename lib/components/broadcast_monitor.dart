@@ -24,6 +24,7 @@ class CommandCenterMonitor extends StatelessWidget {
   final bool repeatOne;
   final bool emergencyActive;
   final String emergencyMessage;
+  final int emergencyRemainingSeconds;
   final bool monitorMuted;
   final VoidCallback? onToggleMonitorMute;
   final ValueChanged<int>? onSeekTo;
@@ -44,6 +45,7 @@ class CommandCenterMonitor extends StatelessWidget {
     this.repeatOne = false,
     this.emergencyActive = false,
     this.emergencyMessage = '',
+    this.emergencyRemainingSeconds = 0,
     this.monitorMuted = true,
     this.onToggleMonitorMute,
     this.onSeekTo,
@@ -124,7 +126,11 @@ class CommandCenterMonitor extends StatelessWidget {
                           ),
                         ),
                       ),
-                    if (emergencyActive) _EmergencyPreview(message: emergencyMessage),
+                    if (emergencyActive)
+                      _EmergencyPreview(
+                        message: emergencyMessage,
+                        remainingSeconds: emergencyRemainingSeconds,
+                      ),
                   ],
                 ),
               ),
@@ -743,7 +749,8 @@ class _StaticMediaSurface extends StatelessWidget {
 
 class _EmergencyPreview extends StatelessWidget {
   final String message;
-  const _EmergencyPreview({required this.message});
+  final int remainingSeconds;
+  const _EmergencyPreview({required this.message, this.remainingSeconds = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -758,6 +765,27 @@ class _EmergencyPreview extends StatelessWidget {
             const SizedBox(height: 12),
             const Text('EMERGENCY BROADCAST',
                 style: TextStyle(color: AppColors.dangerRose, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 12)),
+            if (remainingSeconds > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerRose.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.dangerRose.withOpacity(0.5)),
+                ),
+                child: Text(
+                  'AUTO-ENDS IN ${formatSeconds(remainingSeconds)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'JetBrains Mono',
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,

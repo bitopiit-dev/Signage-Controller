@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
+import '../models/playlist_item.dart';
 import '../widgets/digital_clock.dart';
 
 class ProCommandHeader extends StatelessWidget {
@@ -19,6 +20,7 @@ class ProCommandHeader extends StatelessWidget {
   final VoidCallback? onClearCache;
   final Function(String)? onCardTap;
   final bool emergencyActive;
+  final int emergencyRemainingSeconds;
   final String activeFilter;
 
   const ProCommandHeader({
@@ -38,6 +40,7 @@ class ProCommandHeader extends StatelessWidget {
     this.onClearCache,
     this.onCardTap,
     this.emergencyActive = false,
+    this.emergencyRemainingSeconds = 0,
     this.activeFilter = 'total',
   });
 
@@ -141,7 +144,11 @@ class ProCommandHeader extends StatelessWidget {
                   title: 'BROADCAST',
                   actions: [
                     ButtonAction(
-                      label: emergencyActive ? 'End Emergency' : 'Emergency Broadcast',
+                      label: emergencyActive
+                          ? (emergencyRemainingSeconds > 0
+                              ? 'End Emergency (${formatSeconds(emergencyRemainingSeconds)})'
+                              : 'End Emergency')
+                          : 'Emergency Broadcast',
                       icon: emergencyActive ? Icons.campaign_outlined : Icons.campaign,
                       onTap: onEmergencyBroadcast,
                       isDanger: true,
@@ -160,7 +167,7 @@ class ProCommandHeader extends StatelessWidget {
                 ),
                 if (emergencyActive) ...[
                   const SizedBox(width: AppSpacing.s3),
-                  const _EmergencyLiveChip(),
+                  _EmergencyLiveChip(remainingSeconds: emergencyRemainingSeconds),
                 ],
               ],
             ),
@@ -459,7 +466,8 @@ class ButtonAction {
 }
 
 class _EmergencyLiveChip extends StatefulWidget {
-  const _EmergencyLiveChip();
+  final int remainingSeconds;
+  const _EmergencyLiveChip({this.remainingSeconds = 0});
 
   @override
   State<_EmergencyLiveChip> createState() => _EmergencyLiveChipState();
@@ -488,13 +496,17 @@ class _EmergencyLiveChipState extends State<_EmergencyLiveChip>
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.dangerRose.withOpacity(0.6)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.dangerRose),
-            SizedBox(width: 6),
-            Text('EMERGENCY ON AIR',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.dangerRose, letterSpacing: 1)),
+            const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.dangerRose),
+            const SizedBox(width: 6),
+            Text(
+              widget.remainingSeconds > 0
+                  ? 'EMERGENCY ON AIR (${formatSeconds(widget.remainingSeconds)})'
+                  : 'EMERGENCY ON AIR',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.dangerRose, letterSpacing: 1),
+            ),
           ],
         ),
       ),

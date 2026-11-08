@@ -106,6 +106,35 @@ class _ControllerScreenState extends State<ControllerScreen>
   bool _emergencyActive = false;
   String _emergencyMessage = '';
   int _emergencySeq = 0;
+  int _emergencyDurationSeconds = 0;
+  int _emergencyStartedAtMs = 0;
+
+  int get _emergencyRemainingSeconds {
+    if (!_emergencyActive || _emergencyDurationSeconds <= 0) return 0;
+    final elapsedSec = (_nowMs - _emergencyStartedAtMs) ~/ 1000;
+    return max(0, _emergencyDurationSeconds - elapsedSec);
+  }
+
+  void _checkEmergencyTimer() {
+    if (!_emergencyActive || _emergencyDurationSeconds <= 0) return;
+    final elapsedSec = (_nowMs - _emergencyStartedAtMs) ~/ 1000;
+    if (elapsedSec >= _emergencyDurationSeconds) {
+      _stopEmergency(reason: 'Timer expired');
+    }
+  }
+
+  void _stopEmergency({String? reason}) {
+    if (!_emergencyActive) return;
+    setState(() {
+      _emergencyActive = false;
+      _emergencyDurationSeconds = 0;
+      _emergencyStartedAtMs = 0;
+      _emergencySeq++;
+    });
+    final logText = reason != null ? 'Emergency broadcast ended ($reason)' : 'Emergency broadcast ended';
+    _log(logText, AppColors.successEmerald);
+    _toast(logText);
+  }
 
   // ── Local preview on the controller ──────────────────────
   VideoPlayerController? _previewController;
@@ -133,6 +162,7 @@ class _ControllerScreenState extends State<ControllerScreen>
       if (!mounted) return;
       _tickAutoplay();
       _tickDevices();
+      _checkEmergencyTimer();
       setState(() {});
     });
   }
@@ -1249,64 +1279,127 @@ class _ControllerScreenState extends State<ControllerScreen>
 
   Future<void> _toggleEmergency() async {
     if (_emergencyActive) {
-      setState(() {
-        _emergencyActive = false;
-        _emergencySeq++;
-      });
-      _log('Emergency broadcast ended', AppColors.successEmerald);
+      _stopEmergency(reason: 'Manual');
       return;
     }
+    int durationSec = 0; // 0 = Manual / Until Ended
     final msgController = TextEditingController(
         text: _emergencyMessage.isEmpty ? 'Please follow staff instructions and proceed to the nearest exit.' : _emergencyMessage);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceNavy,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.large),
-          side: BorderSide(color: AppColors.dangerRose.withOpacity(0.4)),
-        ),
-        title: const _DialogTitle(icon: Icons.campaign, text: 'EMERGENCY BROADCAST', color: AppColors.dangerRose),
-        content: SizedBox(
-          width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('This message takes over every connected screen and mutes playback until you end it.',
-                  style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
-              const SizedBox(height: 16),
-              TextField(
-                controller: msgController,
-                maxLines: 4,
-                autofocus: true,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.standard)),
-                ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceNavy,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              side: BorderSide(color: AppColors.dangerRose.withOpacity(0.4)),
+            ),
+            title: const _DialogTitle(icon: Icons.campaign, text: 'EMERGENCY BROADCAST', color: AppColors.dangerRose),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('This message takes over every connected screen and mutes playback until ended or timer expires.',
+                      style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
+                  const SizedBox(height: 16),
+                  _label('EMERGENCY MESSAGE'),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: msgController,
+                    maxLines: 3,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.standard)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _label('BROADCAST TIMER / DURATION'),
+                      const Spacer(),
+                      Text(
+                        durationSec == 0
+                            ? 'UNTIL ENDED (MANUAL)'
+                            : '${formatSeconds(durationSec)} (${durationSec < 60 ? "$durationSec sec" : "${durationSec ~/ 60} min"})',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.accentCyan,
+                          fontFamily: 'JetBrains Mono',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      0,   // Manual
+                      30,  // 30s
+                      60,  // 1m
+                      120, // 2m
+                      300, // 5m
+                      600, // 10m
+                      900, // 15m
+                      1800,// 30m
+                    ].map((sec) {
+                      final selected = durationSec == sec;
+                      final label = sec == 0
+                          ? 'Manual'
+                          : (sec < 60 ? '${sec}s' : '${sec ~/ 60}m');
+                      return ChoiceChip(
+                        label: Text(label, style: const TextStyle(fontSize: 11)),
+                        selected: selected,
+                        selectedColor: AppColors.dangerRose.withOpacity(0.25),
+                        backgroundColor: Colors.white.withOpacity(0.04),
+                        labelStyle: TextStyle(
+                          color: selected ? Colors.white : Colors.white70,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        side: BorderSide(
+                          color: selected ? AppColors.dangerRose : Colors.white10,
+                        ),
+                        onSelected: (_) => setLocal(() => durationSec = sec),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRose),
+                onPressed: () => Navigator.pop(ctx, true),
+                icon: const Icon(Icons.campaign, size: 18),
+                label: const Text('BROADCAST NOW'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRose),
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.campaign, size: 18),
-            label: const Text('BROADCAST NOW'),
-          ),
-        ],
+          );
+        },
       ),
     );
     if (ok != true) return;
     setState(() {
       _emergencyMessage = msgController.text.trim().isEmpty ? 'EMERGENCY' : msgController.text.trim();
+      _emergencyDurationSeconds = durationSec;
+      _emergencyStartedAtMs = _nowMs;
       _emergencyActive = true;
       _emergencySeq++;
     });
-    _log('EMERGENCY broadcast live', AppColors.dangerRose);
+    if (durationSec > 0) {
+      _log('EMERGENCY broadcast live (${formatSeconds(durationSec)} timer)', AppColors.dangerRose);
+      _toast('Emergency broadcast live (${formatSeconds(durationSec)} timer)');
+    } else {
+      _log('EMERGENCY broadcast live', AppColors.dangerRose);
+      _toast('Emergency broadcast live');
+    }
   }
 
   void _showScreenshot(String id) {
@@ -1420,6 +1513,8 @@ class _ControllerScreenState extends State<ControllerScreen>
         'active': _emergencyActive,
         'message': _emergencyMessage,
         'seq': _emergencySeq,
+        'durationSeconds': _emergencyDurationSeconds,
+        'remainingSeconds': _emergencyRemainingSeconds,
       },
       'items': _playlist.map((i) => i.toJson()).toList(),
     };
@@ -1661,6 +1756,7 @@ class _ControllerScreenState extends State<ControllerScreen>
               offlineCount: devices.length - online.length,
               serverLoad: _uptime(),
               emergencyActive: _emergencyActive,
+              emergencyRemainingSeconds: _emergencyRemainingSeconds,
               activeFilter: _deviceFilter,
               onEmergencyBroadcast: _toggleEmergency,
               onForceSync: _forceSync,
@@ -1714,6 +1810,7 @@ class _ControllerScreenState extends State<ControllerScreen>
                     repeatOne: _repeatOne,
                     emergencyActive: _emergencyActive,
                     emergencyMessage: _emergencyMessage,
+                    emergencyRemainingSeconds: _emergencyRemainingSeconds,
                     monitorMuted: _monitorMuted,
                     onToggleMonitorMute: () {
                       setState(() => _monitorMuted = !_monitorMuted);
