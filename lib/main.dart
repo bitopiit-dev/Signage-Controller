@@ -1791,15 +1791,46 @@ class _ControllerScreenState extends State<ControllerScreen>
       });
     }
     final commands = Map<String, dynamic>.from(_commandsFor(id));
-    if (_emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty) {
-      commands['jumpTo'] = _emergencyMediaFilename;
-      commands['jumpToFilename'] = _emergencyMediaFilename;
-      commands['currentFilename'] = _emergencyMediaFilename;
+    final stateJson = _buildStateJson();
+    
+    // Send command boolean triggers alongside sequence counters for max compatibility across all TV player apps
+    if ((commands['rebootSeq'] as int? ?? 0) > 0) {
+      commands['reboot'] = true;
+      commands['restart'] = true;
     }
+    if ((commands['captureSeq'] as int? ?? 0) > 0) {
+      commands['capture'] = true;
+      commands['screenshot'] = true;
+    }
+    if ((commands['identifySeq'] as int? ?? 0) > 0) {
+      commands['identify'] = true;
+      commands['flash'] = true;
+    }
+    if ((commands['clearCacheSeq'] as int? ?? 0) > 0) {
+      commands['clearCache'] = true;
+    }
+
+    // Merge playback state into commands map so poll-based TV apps get immediate updates
+    commands['isPaused'] = _isPaused;
+    commands['paused'] = _isPaused;
+    commands['isStopped'] = _isStopped;
+    commands['stopped'] = _isStopped;
+    commands['volume'] = _volume;
+    if (stateJson['currentFilename'] != null) {
+      commands['currentFilename'] = stateJson['currentFilename'];
+      commands['jumpToFilename'] = stateJson['currentFilename'];
+      commands['jumpTo'] = stateJson['currentFilename'];
+    }
+    commands['jumpToSeq'] = _jumpSeq;
+    commands['seekSeq'] = _seekSeq;
+    commands['syncSeq'] = _syncSeq;
+    commands['playlistVersion'] = _playlistVersion;
+
     return Response.ok(
       jsonEncode({
         'ok': true,
         'commands': commands,
+        'state': stateJson,
         'serverTime': now,
         'emergency': _buildEmergencyJson(),
       }),
