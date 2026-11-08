@@ -222,37 +222,45 @@ class ProCommandHeader extends StatelessWidget {
   }
 
   Widget _buildIpBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black26,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(4),
+      child: InkWell(
+        onTap: onRefreshIp,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.glassWhite),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: serverRunning ? AppColors.successEmerald : AppColors.dangerRose,
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black26,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: AppColors.glassWhite),
           ),
-          const SizedBox(width: 6),
-          const Icon(Icons.terminal, size: 12, color: AppColors.accentCyan),
-          const SizedBox(width: 8),
-          Text(
-            serverRunning ? 'http://$localIp:$activePort' : 'SERVER OFFLINE',
-            style: const TextStyle(
-              fontFamily: 'JetBrains Mono',
-              fontSize: 11,
-              color: AppColors.accentCyan,
-              fontWeight: FontWeight.w500,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: serverRunning ? AppColors.successEmerald : AppColors.dangerRose,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.terminal, size: 12, color: AppColors.accentCyan),
+              const SizedBox(width: 8),
+              Text(
+                serverRunning ? 'http://$localIp:$activePort' : 'SERVER OFFLINE',
+                style: const TextStyle(
+                  fontFamily: 'JetBrains Mono',
+                  fontSize: 11,
+                  color: AppColors.accentCyan,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -399,32 +407,35 @@ class ButtonGroup extends StatelessWidget {
   }
 
   Widget _buildActionButton(ButtonAction action) {
-    return InkWell(
-      onTap: action.onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: action.isActive ? AppColors.dangerRose.withOpacity(0.18) : null,
-          border: const Border(left: BorderSide(color: AppColors.glassWhite)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              action.icon,
-              size: 14,
-              color: action.isDanger ? AppColors.dangerRose : AppColors.accentCyan,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              action.label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: action.isDanger ? AppColors.dangerRose : Colors.white70,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: action.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: action.isActive ? AppColors.dangerRose.withOpacity(0.18) : null,
+            border: const Border(left: BorderSide(color: AppColors.glassWhite)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                action.icon,
+                size: 14,
+                color: action.isDanger ? AppColors.dangerRose : AppColors.accentCyan,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                action.label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: action.isDanger ? AppColors.dangerRose : Colors.white70,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -257,27 +257,31 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
                 final selected = _filter == f;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6, top: 6, bottom: 6),
-                  child: InkWell(
-                    onTap: () => setState(() => _filter = f),
+                  child: Material(
+                    color: Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: selected ? AppColors.accentCyan.withOpacity(0.12) : Colors.white.withOpacity(0.03),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: selected ? AppColors.accentCyan.withOpacity(0.5) : AppColors.glassWhite,
+                    child: InkWell(
+                      onTap: () => setState(() => _filter = f),
+                      borderRadius: BorderRadius.circular(20),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: selected ? AppColors.accentCyan.withOpacity(0.12) : Colors.white.withOpacity(0.03),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: selected ? AppColors.accentCyan.withOpacity(0.5) : AppColors.glassWhite,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        '${labels[f]}  $count',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1,
-                          color: selected ? AppColors.accentCyan : Colors.white54,
+                        child: Text(
+                          '${labels[f]}  $count',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                            color: selected ? AppColors.accentCyan : Colors.white54,
+                          ),
                         ),
                       ),
                     ),
@@ -314,15 +318,19 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
                   style: TextStyle(fontSize: 8, color: Colors.white24, fontWeight: FontWeight.w800)),
             ),
           if (widget.onSelectAll != null && widget.playlist.isNotEmpty)
-            InkWell(
-              onTap: () => widget.onSelectAll!(!allSelected),
+            Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(
-                  allSelected ? 'CLEAR' : 'SELECT ALL',
-                  style: const TextStyle(
-                      fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.accentCyan, letterSpacing: 1),
+              child: InkWell(
+                onTap: () => widget.onSelectAll!(!allSelected),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Text(
+                    allSelected ? 'CLEAR' : 'SELECT ALL',
+                    style: const TextStyle(
+                        fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.accentCyan, letterSpacing: 1),
+                  ),
                 ),
               ),
             ),
@@ -543,12 +551,15 @@ class _RowIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: color),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon, size: 18, color: color),
+          ),
         ),
       ),
     );

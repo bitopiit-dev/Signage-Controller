@@ -421,7 +421,9 @@ class _ControllerScreenState extends State<ControllerScreen>
     _previewController = null;
     _previewFilename = null;
     if (mounted) setState(() {});
-    await old?.dispose();
+    if (old != null) {
+      unawaited(old.dispose().catchError((_) {}));
+    }
   }
 
   Future<void> _syncLocalPreview() async {

@@ -64,27 +64,31 @@ class DeviceCommandWall extends StatelessWidget {
               if (filter != 'total')
                 Padding(
                   padding: const EdgeInsets.fromLTRB(AppSpacing.s2, 0, AppSpacing.s2, 8),
-                  child: InkWell(
-                    onTap: onClearFilter,
+                  child: Material(
+                    color: Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.glassWhite),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.filter_alt_rounded, size: 12, color: AppColors.accentCyan),
-                          const SizedBox(width: 6),
-                          Text(
-                            filter == 'active' ? 'SHOWING ACTIVE NODES' : 'SHOWING OFFLINE NODES',
-                            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white54, letterSpacing: 1),
-                          ),
-                          const Spacer(),
-                          const Icon(Icons.close_rounded, size: 12, color: Colors.white38),
-                        ],
+                    child: InkWell(
+                      onTap: onClearFilter,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.glassWhite),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.filter_alt_rounded, size: 12, color: AppColors.accentCyan),
+                            const SizedBox(width: 6),
+                            Text(
+                              filter == 'active' ? 'SHOWING ACTIVE NODES' : 'SHOWING OFFLINE NODES',
+                              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white54, letterSpacing: 1),
+                            ),
+                            const Spacer(),
+                            const Icon(Icons.close_rounded, size: 12, color: Colors.white38),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -614,21 +618,24 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 15, color: color),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: color, letterSpacing: 0.5),
-            ),
-          ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: color, letterSpacing: 0.5),
+              ),
+            ],
+          ),
         ),
       ),
     );

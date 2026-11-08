@@ -245,7 +245,7 @@ class _GroupDivider extends StatelessWidget {
   }
 }
 
-class _DockButton extends StatefulWidget {
+class _DockButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final bool isActive;
@@ -261,44 +261,37 @@ class _DockButton extends StatefulWidget {
   });
 
   @override
-  State<_DockButton> createState() => _DockButtonState();
-}
-
-class _DockButtonState extends State<_DockButton> {
-  bool _isPressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final Color buttonColor = widget.color ?? (widget.isActive ? AppColors.actionBlue : Colors.white70);
+    final Color buttonColor = color ?? (isActive ? AppColors.actionBlue : Colors.white70);
 
     return Tooltip(
-      message: widget.tooltip,
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _isPressed = true),
-        onTapUp: (_) => setState(() => _isPressed = false),
-        onTapCancel: () => setState(() => _isPressed = false),
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _isPressed ? 0.9 : 1.0,
-          duration: const Duration(milliseconds: 100),
-          child: Container(
-            padding: const EdgeInsets.all(AppSpacing.s1),
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: widget.isActive ? AppColors.actionBlue.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.button),
-              boxShadow: widget.isActive ? [
-                BoxShadow(
-                  color: AppColors.actionBlue.withOpacity(0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                )
-              ] : null,
-            ),
-            child: Icon(
-              widget.icon,
-              color: buttonColor,
-              size: 24,
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.button),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(AppRadius.button),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.s1),
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.actionBlue.withOpacity(0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                boxShadow: isActive ? [
+                  BoxShadow(
+                    color: AppColors.actionBlue.withOpacity(0.2),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  )
+                ] : null,
+              ),
+              child: Icon(
+                icon,
+                color: buttonColor,
+                size: 22,
+              ),
             ),
           ),
         ),
