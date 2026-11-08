@@ -1684,14 +1684,20 @@ class _ControllerScreenState extends State<ControllerScreen>
           ]
         : _playlist.map((i) => i.toJson()).toList();
 
+    final bool isLive = hasEmergencyMedia ? true : !_isStopped;
+    final bool isStopped = hasEmergencyMedia ? false : _isStopped;
+    final bool isPaused = hasEmergencyMedia ? false : _isPaused;
+
     return {
       'app': SignageProtocol.appId,
       'protocol': SignageProtocol.protocolVersion,
       'version': _playlistVersion + (_emergencyActive ? 10000 : 0),
       'serverTime': _nowMs,
-      'live': true,
-      'stopped': false,
-      'paused': false,
+      'live': isLive,
+      'stopped': isStopped,
+      'paused': isPaused,
+      'isPaused': isPaused,
+      'isStopped': isStopped,
       'volume': _volume,
       'currentFilename': effectiveCurrentFilename,
       'currentPosition': pos ~/ 1000,
@@ -1811,15 +1817,20 @@ class _ControllerScreenState extends State<ControllerScreen>
     }
 
     // Merge playback state into commands map so poll-based TV apps get immediate updates
-    commands['isPaused'] = _isPaused;
-    commands['paused'] = _isPaused;
-    commands['isStopped'] = _isStopped;
-    commands['stopped'] = _isStopped;
+    commands['isPaused'] = stateJson['isPaused'];
+    commands['paused'] = stateJson['paused'];
+    commands['isStopped'] = stateJson['isStopped'];
+    commands['stopped'] = stateJson['stopped'];
+    commands['live'] = stateJson['live'];
     commands['volume'] = _volume;
     if (stateJson['currentFilename'] != null) {
       commands['currentFilename'] = stateJson['currentFilename'];
       commands['jumpToFilename'] = stateJson['currentFilename'];
       commands['jumpTo'] = stateJson['currentFilename'];
+    } else {
+      commands['currentFilename'] = null;
+      commands['jumpToFilename'] = null;
+      commands['jumpTo'] = null;
     }
     commands['jumpToSeq'] = _jumpSeq;
     commands['seekSeq'] = _seekSeq;
