@@ -2044,54 +2044,88 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     };
   }
 
-  Map<String, dynamic> _buildStateJson() {
+  Map<String, dynamic> _buildStateJson({String? deviceId}) {
     final pos = _currentPositionMs();
     final item = _currentItem;
     
-    // Override currentFilename and items when emergency media or screen share is active
+    // Check if device has a custom media override
+    final c = deviceId != null ? _deviceCommands[deviceId] : null;
+    final bool devSync = c != null ? (c['syncMaster'] != false) : true;
+    final String? devOverride = c != null ? (c['overrideFilename'] as String?) : null;
+    final bool devPaused = c != null ? (c['paused'] == true) : false;
+    final bool devStopped = c != null ? (c['stopped'] == true) : false;
+    
+    // Override currentFilename and items when emergency media, screen share, or per-device custom media is active
     final bool hasEmergencyMedia = _emergencyActive && _emergencyMediaFilename != null && _emergencyMediaFilename!.isNotEmpty;
-    final bool isScreenSharing = _screenSharingActive;
+    final bool isScreenSharing = _screenSharingActive && devSync;
+    final bool hasCustomMedia = !devSync && devOverride != null && devOverride.isNotEmpty;
+
     final String? activeOverrideFilename = hasEmergencyMedia
         ? _emergencyMediaFilename
-        : (isScreenSharing ? 'screen_frame.jpg' : null);
+        : (isScreenSharing ? 'screen_frame.jpg' : (hasCustomMedia ? devOverride : null));
     final bool hasMediaOverride = activeOverrideFilename != null;
     
     final effectiveCurrentFilename = hasMediaOverride
         ? activeOverrideFilename
         : (_isStopped ? null : _currentFilename);
         
-    final effectiveItems = hasMediaOverride
-        ? [
-            PlaylistItem(
-              filename: activeOverrideFilename,
-              type: MediaUtils.getMediaType(activeOverrideFilename),
-              durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
-            ).toJson()
-          ]
-        : _playlist.map((i) => i.toJson()).toList();
+    List<Map<String, dynamic>> effectiveItems;
+    if (hasCustomMedia) {
+      final customItem = PlaylistItem(
+        filename: devOverride,
+        type: MediaUtils.getMediaType(devOverride),
+        durationSeconds: 3600,
+      ).toJson();
+      effectiveItems = [customItem, ..._playlist.map((i) => i.toJson())];
+    } else if (hasMediaOverride) {
+      effectiveItems = [
+        PlaylistItem(
+          filename: activeOverrideFilename,
+          type: MediaUtils.getMediaType(activeOverrideFilename),
+          durationSeconds: _emergencyDurationSeconds > 0 ? _emergencyDurationSeconds : 3600,
+        ).toJson()
+      ];
+    } else {
+      effectiveItems = _playlist.map((i) => i.toJson()).toList();
+    }
 
-    final bool isLive = hasMediaOverride ? true : !_isStopped;
-    final bool isStopped = hasMediaOverride ? false : _isStopped;
-    final bool isPaused = hasMediaOverride ? false : _isPaused;
+    final bool isLive = hasMediaOverride ? !devStopped : !_isStopped;
+    final bool isStopped = hasMediaOverride ? devStopped : _isStopped;
+    final bool isPaused = hasMediaOverride ? devPaused : _isPaused;
+
+    final int effectiveJumpSeq = _jumpSeq +
+        (_emergencyActive ? 1000 : 0) +
+        (_screenSharingActive ? 2000 : 0) +
+        (c != null ? ((c['jumpToSeq'] as int?) ?? 0) : 0);
+
+    final String mediaUrl = effectiveCurrentFilename != null
+        ? 'http://$_localIp:$_activePort/${Uri.encodeComponent(effectiveCurrentFilename)}'
+        : '';
 
     return {
       'app': SignageProtocol.appId,
       'protocol': SignageProtocol.protocolVersion,
-      'version': _playlistVersion + (_emergencyActive ? 10000 : 0) + (_screenSharingActive ? 20000 : 0),
+      'version': _playlistVersion + (_emergencyActive ? 10000 : 0) + (_screenSharingActive ? 20000 : 0) + (hasCustomMedia ? 30000 : 0),
       'serverTime': _nowMs,
       'live': isLive,
       'stopped': isStopped,
       'paused': isPaused,
       'isPaused': isPaused,
       'isStopped': isStopped,
+      'syncMaster': devSync,
       'volume': _volume,
       'currentFilename': effectiveCurrentFilename,
+      'filename': effectiveCurrentFilename,
+      'playMedia': effectiveCurrentFilename,
+      'mediaUrl': mediaUrl,
+      'url': mediaUrl,
       'currentPosition': pos ~/ 1000,
       'currentPositionMs': pos,
       'currentDurationMs': hasMediaOverride ? 3600000 : (item == null ? 0 : _effectiveDurationMs(item)),
       'nextFilename': hasMediaOverride ? activeOverrideFilename : (_isStopped ? null : _nextFilename),
-      'jumpToSeq': _jumpSeq + (_emergencyActive ? 1000 : 0) + (_screenSharingActive ? 2000 : 0),
+      'jumpToSeq': effectiveJumpSeq,
       'jumpToFilename': effectiveCurrentFilename,
+      'jumpTo': effectiveCurrentFilename,
       'seekSeq': _seekSeq,
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
@@ -2343,11 +2377,13 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     commands['syncSeq'] = _syncSeq;
     commands['playlistVersion'] = _playlistVersion;
 
+    final deviceStateJson = _buildStateJson(deviceId: id);
+
     return Response.ok(
       jsonEncode({
         'ok': true,
         'commands': commands,
-        'state': stateJson,
+        'state': deviceStateJson,
         'serverTime': now,
         'emergency': _buildEmergencyJson(),
       }),
@@ -2414,7 +2450,17 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
           );
         }
         if (cleanPath == 'playlist.json' || cleanPath == 'state.json') {
-          return Response.ok(jsonEncode(_buildStateJson()), headers: {
+          final queryDevId = req.url.queryParameters['deviceId'] ?? req.url.queryParameters['id'];
+          final connInfo = req.context['shelf.io.connection_info'] as HttpConnectionInfo?;
+          final connIp = connInfo?.remoteAddress.address;
+          
+          String? targetDevId = queryDevId;
+          if (targetDevId == null && connIp != null) {
+            final match = _devices.values.where((d) => d.ip == connIp).toList();
+            if (match.isNotEmpty) targetDevId = match.first.id;
+          }
+
+          return Response.ok(jsonEncode(_buildStateJson(deviceId: targetDevId)), headers: {
             'Content-Type': 'application/json; charset=utf-8',
             'Cache-Control': 'no-store',
           });
