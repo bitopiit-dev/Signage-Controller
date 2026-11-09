@@ -126,13 +126,32 @@ class _ControllerScreenState extends State<ControllerScreen>
 
   void _stopEmergency({String? reason}) {
     if (!_emergencyActive) return;
+    final int now = _nowMs;
+    final int emergencyElapsedMs = _emergencyStartedAtMs > 0 ? (now - _emergencyStartedAtMs) : 0;
+
     setState(() {
       _emergencyActive = false;
       _emergencyDurationSeconds = 0;
       _emergencyStartedAtMs = 0;
       _emergencyMediaFilename = null;
       _emergencySeq++;
+
+      // Freeze/Pause compensation: Add emergency elapsed time to pausedAccumulatedMs
+      // so media playback resumes at the EXACT same millisecond position!
+      if (emergencyElapsedMs > 0 && !_isStopped && _startedAtMs > 0) {
+        _pausedAccumulatedMs += emergencyElapsedMs;
+      }
+      _syncSeq++;
+      _seekSeq++;
     });
+
+    // Resume local preview at the exact preserved position
+    if (!_isPaused && !_isStopped && _previewController != null) {
+      final pos = _currentPositionMs();
+      _previewController?.seekTo(Duration(milliseconds: pos));
+      _previewController?.play();
+    }
+
     final logText = reason != null ? 'Emergency broadcast ended ($reason)' : 'Emergency broadcast ended';
     _log(logText, AppColors.successEmerald);
     _toast(logText);
@@ -574,7 +593,11 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     if (_isStopped || _currentFilename == null || _startedAtMs == 0) return 0;
     final now = _nowMs;
     var pausedMs = _pausedAccumulatedMs;
-    if (_isPaused && _pauseStartedAtMs != 0) pausedMs += now - _pauseStartedAtMs;
+    if (_emergencyActive && _emergencyStartedAtMs > 0) {
+      pausedMs += (now - _emergencyStartedAtMs);
+    } else if (_isPaused && _pauseStartedAtMs != 0) {
+      pausedMs += now - _pauseStartedAtMs;
+    }
     return max(0, now - _startedAtMs - pausedMs);
   }
 
