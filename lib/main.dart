@@ -2092,6 +2092,19 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
       'syncSeq': _syncSeq,
       'shuffle': _shuffle,
       'repeatOne': _repeatOne,
+      'youtubeSettings': {
+        'bufferMs': 15000,
+        'minBufferMs': 5000,
+        'maxBufferMs': 30000,
+        'preferredQuality': '720p',
+        'preloadNextItem': true,
+      },
+      'bufferSettings': {
+        'minBufferMs': 5000,
+        'maxBufferMs': 30000,
+        'bufferForPlaybackMs': 3000,
+        'bufferForPlaybackAfterRebufferMs': 5000,
+      },
       'screenSharing': {
         'active': _screenSharingActive,
         'url': _screenSharingActive ? 'http://$_localIp:$_activePort/screen_frame.jpg' : null,
@@ -2248,6 +2261,10 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     // High-frequency polling interval hint for TVs (300ms)
     commands['pollIntervalMs'] = 300;
     commands['targetPollIntervalMs'] = 300;
+    commands['youtubeSettings'] = stateJson['youtubeSettings'];
+    commands['bufferSettings'] = stateJson['bufferSettings'];
+    commands['preferredQuality'] = '720p';
+    commands['bufferMs'] = 15000;
 
     // Ultra-Low Latency Auto Drift Correction (Sub-Second 400ms Threshold)
     if (devSync &&
