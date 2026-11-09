@@ -2482,7 +2482,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
               )
             else
               SizedBox(
-                width: 450,
+                width: 420,
                 child: CommandCenterMonitor(
                   jumpToFilename: _isStopped ? null : _currentFilename,
                   previewController: _previewFilename == _currentFilename ? _previewController : null,
