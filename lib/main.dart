@@ -1610,14 +1610,18 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
           c['syncMaster'] = false;
           c['paused'] = false;
           c['stopped'] = false;
-          _log('Assigned media to $label: $value', AppColors.accentCyan);
+          c['jumpToSeq'] = ((c['jumpToSeq'] as int?) ?? 0) + 1;
+          _log('Assigned custom media to $label: $value', AppColors.accentCyan);
+          _toast('Playing $value on $label');
           break;
         case 'syncMaster':
           c['syncMaster'] = true;
           c['overrideFilename'] = null;
           c['paused'] = false;
           c['stopped'] = false;
+          c['jumpToSeq'] = ((c['jumpToSeq'] as int?) ?? 0) + 1;
           _log('Synced $label back to Master Loop', AppColors.successEmerald);
+          _toast('Synced $label to Master Loop');
           break;
         case 'reboot':
           _bumpDeviceSeq(id, 'reboot');
@@ -2299,6 +2303,22 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
       commands['playbackSpeed'] = 1.0;
     }
 
+    final int devJumpSeq = _jumpSeq + ((c['jumpToSeq'] as int?) ?? 0);
+    commands['jumpToSeq'] = devJumpSeq;
+    commands['overrideFilename'] = devOverride;
+    commands['customFilename'] = devOverride;
+
+    if (!devSync && devOverride != null) {
+      final overrideItem = PlaylistItem(
+        filename: devOverride,
+        type: MediaUtils.getMediaType(devOverride),
+        durationSeconds: 3600,
+      ).toJson();
+      commands['items'] = [overrideItem, ...stateJson['items']];
+      commands['overrideItem'] = overrideItem;
+      commands['customItem'] = overrideItem;
+    }
+
     if (_screenSharingActive && devSync) {
       commands['screenShareUrl'] = 'http://$_localIp:$_activePort/screen_frame.jpg';
       commands['currentFilename'] = 'screen_frame.jpg';
@@ -2319,7 +2339,6 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
       commands['filename'] = null;
       commands['playMedia'] = null;
     }
-    commands['jumpToSeq'] = _jumpSeq;
     commands['seekSeq'] = _seekSeq;
     commands['syncSeq'] = _syncSeq;
     commands['playlistVersion'] = _playlistVersion;
