@@ -179,7 +179,7 @@ class DeviceCommandWall extends StatelessWidget {
 
   Widget _buildActivityFeed(int now) {
     return Container(
-      height: 140,
+      height: 110,
       padding: const EdgeInsets.all(AppSpacing.s2),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.2),
@@ -192,10 +192,10 @@ class DeviceCommandWall extends StatelessWidget {
             'ACTIVITY FEED',
             style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1.5),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Expanded(
             child: activity.isEmpty
-                ? Text('No activity yet', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.25)))
+                ? Text('No activity yet', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.25)))
                 : ListView.builder(
                     padding: EdgeInsets.zero,
                     itemCount: activity.length,
@@ -280,24 +280,24 @@ class _EmptyWall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.tv_off_rounded, size: 40, color: Colors.white.withOpacity(0.15)),
-            const SizedBox(height: 12),
+            Icon(Icons.tv_off_rounded, size: 32, color: Colors.white.withOpacity(0.15)),
+            const SizedBox(height: 8),
             Text(
               filter == 'critical' ? 'NO OFFLINE SCREENS' : 'NO SCREENS CONNECTED',
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2, color: Colors.white38),
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white38),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               filter == 'critical'
                   ? 'Every screen is reporting in.'
-                  : 'Open the Signage Player on a TV on the same Wi-Fi.\nIt finds this controller automatically.',
+                  : 'Open Signage Player on a TV on the same Wi-Fi.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.3)),
+              style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.3)),
             ),
           ],
         ),
