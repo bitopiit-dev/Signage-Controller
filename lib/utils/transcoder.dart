@@ -115,20 +115,18 @@ class ProbeResult {
 
   bool get hasVideo => vCodec != null;
 
-  /// H.264 8-bit 4:2:0, at most 1080p30, level 4.1, <= 15 Mbit/s.
-  /// Standard 1080p MP4 videos match this and stream-copy in ~1 second.
+  /// H.264 / HEVC 8-bit / 10-bit 4:2:0, up to 4K 60fps MP4/MOV videos match this and play as-is instantly.
   bool get videoCompatible {
-    if (vCodec != 'h264') return false;
-    if (pixFmt != 'yuv420p' && pixFmt != 'yuvj420p') return false;
+    if (vCodec != 'h264' && vCodec != 'hevc') return false;
+    if (pixFmt != 'yuv420p' && pixFmt != 'yuvj420p' && pixFmt != 'yuv420p10le') return false;
     final prof = (vProfile ?? '').toLowerCase();
-    if (!(prof == 'main' || prof == 'high' || prof.contains('baseline'))) return false;
+    if (!(prof == 'main' || prof == 'high' || prof.contains('baseline') || prof == 'main 10')) return false;
     final longSide = width > height ? width : height;
     final shortSide = width > height ? height : width;
-    if (longSide > 1920 || shortSide > 1080) return false;
-    if (fps > 30.5) return false;
-    if (level > 41) return false;
+    if (longSide > 3840 || shortSide > 2160) return false;
+    if (fps > 60.5) return false;
     final br = vBitRate > 0 ? vBitRate : formatBitRate;
-    if (br > 15000000) return false;
+    if (br > 50000000) return false;
     return true;
   }
 
@@ -373,6 +371,7 @@ class TranscodeQueue {
 
     final args = <String>[
       '-hide_banner', '-nostdin', '-y',
+      '-hwaccel', 'auto',
       '-i', job.sourcePath,
       '-map', '0:v:0', '-map', '0:a:0?',
       '-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1',
@@ -440,7 +439,7 @@ class TranscodeQueue {
       final copyAudio = info.audioCompatible;
 
       final vf = StringBuffer(
-          "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p,setsar=1");
+          "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear,format=yuv420p,setsar=1");
       if (info.fps > 30.5) vf.write(',fps=30');
 
       final errTail = <String>[];
