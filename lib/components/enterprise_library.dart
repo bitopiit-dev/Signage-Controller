@@ -112,67 +112,105 @@ class _EnterpriseLibraryState extends State<EnterpriseLibrary> {
               widget.onFilesDropped?.call(paths);
             }
           },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: widget.width,
-            decoration: BoxDecoration(
-              color: _isDragging ? AppColors.accentCyan.withOpacity(0.12) : AppColors.surfaceNavy.withOpacity(0.7),
-              border: Border.all(
-                color: _isDragging ? AppColors.accentCyan : AppColors.glassWhite,
-                width: _isDragging ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              children: [
-              _buildHeader(),
-              _buildFilters(),
-              _buildSelectionBar(totalSeconds),
-              if (widget.busy)
-                const LinearProgressIndicator(
-                  minHeight: 2,
-                  color: AppColors.accentCyan,
-                  backgroundColor: Colors.transparent,
+          child: Stack(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: widget.width,
+                decoration: BoxDecoration(
+                  color: _isDragging ? AppColors.accentCyan.withOpacity(0.12) : AppColors.surfaceNavy.withOpacity(0.7),
+                  border: Border.all(
+                    color: _isDragging ? AppColors.accentCyan : AppColors.glassWhite,
+                    width: _isDragging ? 2 : 1,
+                  ),
                 ),
-              if (widget.jobsPanel != null) widget.jobsPanel!,
-              Expanded(
-                child: widget.playlist.isEmpty
-                    ? _EmptyLibrary(onAdd: widget.onAddMedia)
-                    : ReorderableListView.builder(
-                        padding: const EdgeInsets.fromLTRB(AppSpacing.s2, 4, AppSpacing.s2, AppSpacing.s2),
-                        buildDefaultDragHandles: false,
-                        itemCount: visible.length,
-                        onReorder: (oldPos, newPos) {
-                          if (!canReorder) return;
-                          widget.onItemReorder(oldPos, newPos);
-                        },
-                        itemBuilder: (context, pos) {
-                          final index = visible[pos];
-                          final item = widget.playlist[index];
-                          return _MediaListItem(
-                            key: ValueKey('item_${item.filename}'),
-                            listPosition: pos,
-                            order: index + 1,
-                            item: item,
-                            canReorder: canReorder,
-                            isPlaying: item.filename == widget.currentFilename,
-                            isSelected: widget.selectedIndex == index,
-                            isMultiSelected: widget.selectedIndices.contains(index),
-                            mediaDir: widget.mediaDir,
-                            onTap: () => widget.onItemSelected(index),
-                            onPlay: widget.onItemDoubleTap != null ? () => widget.onItemDoubleTap!(index) : null,
-                            onEdit: widget.onEditItem != null ? () => widget.onEditItem!(index) : null,
-                            onToggleSelect: () => widget.onToggleSelect(index),
-                          );
-                        },
+                child: Column(
+                  children: [
+                    _buildHeader(),
+                    _buildFilters(),
+                    _buildSelectionBar(totalSeconds),
+                    if (widget.busy)
+                      const LinearProgressIndicator(
+                        minHeight: 2,
+                        color: AppColors.accentCyan,
+                        backgroundColor: Colors.transparent,
                       ),
+                    if (widget.jobsPanel != null) widget.jobsPanel!,
+                    Expanded(
+                      child: widget.playlist.isEmpty
+                          ? _EmptyLibrary(onAdd: widget.onAddMedia)
+                          : ReorderableListView.builder(
+                              padding: const EdgeInsets.fromLTRB(AppSpacing.s2, 4, AppSpacing.s2, AppSpacing.s2),
+                              buildDefaultDragHandles: false,
+                              itemCount: visible.length,
+                              onReorder: (oldPos, newPos) {
+                                if (!canReorder) return;
+                                widget.onItemReorder(oldPos, newPos);
+                              },
+                              itemBuilder: (context, pos) {
+                                final index = visible[pos];
+                                final item = widget.playlist[index];
+                                final tile = _MediaListItem(
+                                  key: ValueKey('item_${item.filename}'),
+                                  listPosition: pos,
+                                  order: index + 1,
+                                  item: item,
+                                  canReorder: canReorder,
+                                  isPlaying: item.filename == widget.currentFilename,
+                                  isSelected: widget.selectedIndex == index,
+                                  isMultiSelected: widget.selectedIndices.contains(index),
+                                  mediaDir: widget.mediaDir,
+                                  onTap: () => widget.onItemSelected(index),
+                                  onPlay: widget.onItemDoubleTap != null ? () => widget.onItemDoubleTap!(index) : null,
+                                  onEdit: widget.onEditItem != null ? () => widget.onEditItem!(index) : null,
+                                  onToggleSelect: () => widget.onToggleSelect(index),
+                                );
+                                if (canReorder) {
+                                  return ReorderableDragStartListener(
+                                    key: ValueKey('drag_${item.filename}'),
+                                    index: pos,
+                                    child: tile,
+                                  );
+                                }
+                                return tile;
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
+              if (_isDragging)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceNavy.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(AppRadius.large),
+                      border: Border.all(color: AppColors.accentCyan, width: 2),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.file_download_rounded, size: 54, color: AppColors.accentCyan),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'DROP FILES HERE TO ADD TO LIBRARY',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.accentCyan, letterSpacing: 1.5),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Supports Videos, Images, Audio, PDFs & YouTube Links',
+                          style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.6)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildHeader() {
     return Container(
@@ -424,6 +462,7 @@ class _MediaListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final highlight = isPlaying ? AppColors.successEmerald : AppColors.actionBlue;
     final active = isPlaying || isSelected;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
@@ -448,16 +487,14 @@ class _MediaListItem extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               children: [
-                if (canReorder)
-                  ReorderableDragStartListener(
-                    index: listPosition,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.drag_indicator_rounded, color: Colors.white.withOpacity(0.25), size: 18),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.drag_indicator_rounded,
+                    color: canReorder ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.15),
+                    size: 18,
+                  ),
+                ),
                 SizedBox(
                   width: 22,
                   child: Text(
