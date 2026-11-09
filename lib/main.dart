@@ -964,20 +964,15 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     if (_busyImporting || filePaths.isEmpty) return;
     setState(() => _busyImporting = true);
     var added = 0;
-    var queued = 0;
     try {
       for (final filePath in filePaths) {
         final name = p.basename(filePath);
-        // Videos are converted (if needed) straight from where they are,
-        // so even multi-GB movies are never copied twice.
-        if (MediaUtils.getMediaType(name) == MediaType.video && _transcoder != null) {
-          _queueConversion(filePath);
-          queued++;
-          continue;
-        }
         final dest = p.join(_mediaDir, name);
         if (p.normalize(filePath) != p.normalize(dest)) {
-          await File(filePath).copy(dest);
+          final srcFile = File(filePath);
+          if (await srcFile.exists()) {
+            await srcFile.copy(dest);
+          }
         }
         final type = MediaUtils.getMediaType(name);
         final duration = await MediaUtils.detectDuration(dest, type);
@@ -992,18 +987,23 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
         });
         _reportedDurationsMs.remove(name);
         added++;
+
+        // Only queue background conversion if file is non-MP4 or non-MOV format
+        final ext = p.extension(name).toLowerCase();
+        if (type == MediaType.video && ext != '.mp4' && ext != '.mov' && _transcoder != null) {
+          _queueConversion(dest);
+        }
       }
     } catch (e) {
       _toast('Import failed: $e');
     } finally {
       setState(() => _busyImporting = false);
     }
-    if (queued > 0) {
-      _toast('$queued video(s) are being prepared for the TVs – progress is shown in the library');
-    }
+
     if (added > 0) {
       _playlistChanged();
-      _log('$added file(s) added to library', AppColors.successEmerald);
+      _log('$added file(s) added to library instantly', AppColors.successEmerald);
+      _toast('$added file(s) added to library instantly');
       if (_isStopped && _playlist.length == added) {
         _playFileAtIndex(0, reason: 'Go live');
       }
