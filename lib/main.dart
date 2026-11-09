@@ -2570,8 +2570,16 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     final masterPos = _currentPositionMs();
     final activeItem = _currentItem;
     final durationMs = activeItem == null ? 0 : _effectiveDurationMs(activeItem);
-    final syncedCount = online.where((d) =>
-        d.filename == _currentFilename && _currentFilename != null && (d.positionMs - masterPos).abs() < 4000).length;
+    final syncedCount = online.where((d) {
+      final c = _deviceCommands[d.id] ?? {};
+      final bool devSync = c['syncMaster'] != false;
+      final String? devOverride = c['overrideFilename'] as String?;
+      return devSync &&
+          devOverride == null &&
+          d.filename == _currentFilename &&
+          _currentFilename != null &&
+          (d.positionMs - masterPos).abs() < 4000;
+    }).length;
     PlaylistItem? nextItem;
     if (_nextFilename != null) {
       for (final i in _playlist) {

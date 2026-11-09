@@ -712,6 +712,50 @@ class _StaticMediaSurface extends StatelessWidget {
         onOpen: () => MediaUtils.openFile(filePath),
       );
     }
+    if (it != null && (it.type == MediaType.video || it.type == MediaType.movie)) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            colors: [AppColors.actionBlue.withOpacity(0.12), Colors.transparent],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.actionBlue.withOpacity(0.15),
+                  border: Border.all(color: AppColors.actionBlue.withOpacity(0.5), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(color: AppColors.actionBlue.withOpacity(0.2), blurRadius: 25, spreadRadius: 2),
+                  ],
+                ),
+                child: const Icon(Icons.movie_filter_rounded, size: 48, color: AppColors.accentCyan),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  it.filename,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.8),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'MASTER VIDEO BROADCAST ON AIR',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.accentCyan, letterSpacing: 2.0),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return _iconSurface(
       it?.type == MediaType.pdf ? Icons.picture_as_pdf_rounded : Icons.description,
       it?.type == MediaType.pdf ? 'PDF BROADCAST' : 'STATIC ASSET BROADCAST',
