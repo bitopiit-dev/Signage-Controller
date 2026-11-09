@@ -2287,14 +2287,20 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
       commands['currentFilename'] = 'screen_frame.jpg';
       commands['jumpToFilename'] = 'screen_frame.jpg';
       commands['jumpTo'] = 'screen_frame.jpg';
+      commands['filename'] = 'screen_frame.jpg';
+      commands['playMedia'] = 'screen_frame.jpg';
     } else if (effectiveFn != null) {
       commands['currentFilename'] = effectiveFn;
       commands['jumpToFilename'] = effectiveFn;
       commands['jumpTo'] = effectiveFn;
+      commands['filename'] = effectiveFn;
+      commands['playMedia'] = effectiveFn;
     } else {
       commands['currentFilename'] = null;
       commands['jumpToFilename'] = null;
       commands['jumpTo'] = null;
+      commands['filename'] = null;
+      commands['playMedia'] = null;
     }
     commands['jumpToSeq'] = _jumpSeq;
     commands['seekSeq'] = _seekSeq;
