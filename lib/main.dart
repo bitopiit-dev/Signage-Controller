@@ -1305,8 +1305,8 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     final t = _transcoder;
     if (t == null || t.jobs.isEmpty) return null;
     return Container(
-      margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 6, AppSpacing.s2, 4),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 4, AppSpacing.s2, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black26,
         borderRadius: BorderRadius.circular(AppRadius.standard),
@@ -1317,17 +1317,22 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            const Icon(Icons.movie_filter_rounded, size: 16, color: AppColors.accentCyan),
+            const Icon(Icons.movie_filter_rounded, size: 15, color: AppColors.accentCyan),
             const SizedBox(width: 8),
             Expanded(child: _label('PREPARING VIDEOS FOR TVs (${t.activeJobs.length})')),
             if (t.jobs.any((j) => !j.isActive))
               TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: () => setState(t.clearFinished),
-                child: const Text('CLEAR', style: TextStyle(fontSize: 10)),
+                child: const Text('CLEAR', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
               ),
           ]),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 180),
+            constraints: const BoxConstraints(maxHeight: 100),
             child: ListView(
               shrinkWrap: true,
               padding: EdgeInsets.zero,
