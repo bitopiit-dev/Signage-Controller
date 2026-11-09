@@ -356,6 +356,133 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
   String? _previewFilename;
   bool _monitorMuted = true;
 
+  // ── Mobile Navigation ────────────────────────────────────
+  int _mobileTab = 1; // 0: Library, 1: Monitor, 2: Command Wall
+
+  Widget _buildMobileHeader(int onlineCount, int totalCount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceNavy.withOpacity(0.95),
+        border: const Border(bottom: BorderSide(color: AppColors.glassWhite)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(AppRadius.standard),
+                ),
+                child: const Icon(Icons.dvr_rounded, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('SIGNAGE CORE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.2)),
+                  Text('http://$_localIp:$_activePort', style: const TextStyle(fontSize: 9, fontFamily: 'JetBrains Mono', color: AppColors.accentCyan)),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.successEmerald.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.successEmerald.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppColors.successEmerald, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text('$onlineCount / $totalCount LIVE', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.successEmerald)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _MobileActionButton(
+                  icon: Icons.sync_rounded,
+                  label: 'Force Sync',
+                  onTap: _forceSync,
+                ),
+                const SizedBox(width: 8),
+                _MobileActionButton(
+                  icon: Icons.campaign_rounded,
+                  label: _emergencyActive ? 'End Emergency' : 'Emergency',
+                  color: AppColors.dangerRose,
+                  onTap: _toggleEmergency,
+                ),
+                const SizedBox(width: 8),
+                _MobileActionButton(
+                  icon: _screenSharingActive ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                  label: _screenSharingActive ? 'Stop Share' : 'Share Screen',
+                  color: _screenSharingActive ? AppColors.dangerRose : AppColors.actionBlue,
+                  onTap: _toggleScreenSharing,
+                ),
+                const SizedBox(width: 8),
+                _MobileActionButton(
+                  icon: Icons.refresh_rounded,
+                  label: 'Refresh IP',
+                  onTap: () async {
+                    await _detectIp();
+                    _toast('Controller address: http://$_localIp:$_activePort');
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileBottomNav(int onlineCount) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceNavy,
+        border: const Border(top: BorderSide(color: AppColors.glassWhite)),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: _mobileTab,
+        onTap: (index) => setState(() => _mobileTab = index),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        selectedItemColor: AppColors.accentCyan,
+        unselectedItemColor: Colors.white54,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.library_music_rounded),
+            label: 'Library',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.monitor_rounded),
+            label: 'Monitor',
+          ),
+          BottomNavigationBarItem(
+            icon: Badge(
+              label: Text('$onlineCount'),
+              isLabelVisible: onlineCount > 0,
+              backgroundColor: AppColors.successEmerald,
+              child: const Icon(Icons.router_rounded),
+            ),
+            label: 'Screens',
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Devices ──────────────────────────────────────────────
   final Map<String, DeviceStatus> _devices = {};
   final Map<String, Map<String, dynamic>> _deviceCommands = {};
@@ -2431,13 +2558,121 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
 
     return Scaffold(
       body: LayoutBuilder(builder: (context, constraints) {
-        final compact = constraints.maxWidth < 1280;
-        final isNarrow = constraints.maxWidth < 1050;
+        final double screenWidth = constraints.maxWidth;
+        final bool isPhone = screenWidth < 650;
+        final bool isCompactDesktop = screenWidth >= 650 && screenWidth < 1280;
+        final bool isNarrowDesktop = screenWidth >= 650 && screenWidth < 1050;
 
+        if (isPhone) {
+          // Mobile Phone Layout (Full-Width Segmented Tab Navigation)
+          Widget mobileActiveTab;
+          switch (_mobileTab) {
+            case 0:
+              mobileActiveTab = EnterpriseLibrary(
+                width: double.infinity,
+                playlist: _playlist,
+                currentFilename: _isStopped ? null : _currentFilename,
+                selectedIndex: _selectedIndex,
+                selectedIndices: _selectedIndices,
+                busy: _busyImporting,
+                mediaDir: _mediaDir,
+                onItemSelected: (i) => setState(() => _selectedIndex = i),
+                onItemDoubleTap: (i) => _playFileAtIndex(i, reason: 'Now playing'),
+                onItemReorder: _onReorder,
+                onToggleSelect: (i) => setState(() =>
+                    _selectedIndices.contains(i) ? _selectedIndices.remove(i) : _selectedIndices.add(i)),
+                onSelectAll: _selectAll,
+                onDeleteSelected: _deleteSelected,
+                onAddMedia: _pickFiles,
+                onFilesDropped: _importFiles,
+                onAddYoutube: _addYoutubeLink,
+                onEditItem: _editItem,
+                jobsPanel: _buildJobsPanel(),
+              );
+              break;
+            case 2:
+              mobileActiveTab = DeviceCommandWall(
+                width: double.infinity,
+                devices: devices,
+                playlist: _playlist,
+                filter: _deviceFilter,
+                commands: _deviceCommands,
+                screenshots: _screenshots,
+                currentFilename: _isStopped ? null : _currentFilename,
+                masterPositionMs: masterPos,
+                activity: _activity,
+                onCommand: _deviceCommand,
+                onViewScreenshot: _showScreenshot,
+                onForget: (id) => _forgetDevice(id),
+                onClearFilter: () => setState(() => _deviceFilter = 'total'),
+              );
+              break;
+            case 1:
+            default:
+              mobileActiveTab = CommandCenterMonitor(
+                jumpToFilename: _isStopped ? null : _currentFilename,
+                previewController: _previewFilename == _currentFilename ? _previewController : null,
+                isPaused: _isPaused,
+                clientCount: online.length,
+                syncedCount: syncedCount,
+                activeItem: activeItem,
+                nextItem: nextItem,
+                positionMs: masterPos,
+                durationMs: durationMs,
+                mediaDir: _mediaDir,
+                shuffle: _shuffle,
+                repeatOne: _repeatOne,
+                emergencyActive: _emergencyActive,
+                emergencyMessage: _emergencyMessage,
+                emergencyMediaFilename: _emergencyMediaFilename,
+                emergencyRemainingSeconds: _emergencyRemainingSeconds,
+                screenSharingActive: _screenSharingActive,
+                screenSharingTargetLabel: _screenSharingTargetLabel,
+                onStopScreenShare: _stopScreenSharing,
+                monitorMuted: _monitorMuted,
+                onToggleMonitorMute: () {
+                  setState(() => _monitorMuted = !_monitorMuted);
+                  _applyPreviewVolume();
+                },
+                onSeekTo: (ms) => _seekTo(ms),
+              );
+              break;
+          }
+
+          return SafeArea(
+            child: Column(
+              children: [
+                _buildMobileHeader(online.length, devices.length),
+                Expanded(child: mobileActiveTab),
+                CommandCenterDock(
+                  isPaused: _isPaused || _isStopped,
+                  isStopped: _isStopped,
+                  shuffle: _shuffle,
+                  repeatOne: _repeatOne,
+                  volume: _volume,
+                  onPlayPause: _togglePlayPause,
+                  onStop: _stopAll,
+                  onNext: _next,
+                  onPrev: _prev,
+                  onSeekBack: () => _seekBy(-10),
+                  onSeekForward: () => _seekBy(10),
+                  onShuffleToggle: _toggleShuffle,
+                  onRepeatToggle: _toggleRepeat,
+                  onSync: _forceSync,
+                  onRebootAll: _rebootAll,
+                  onVolumeChanged: _setVolume,
+                ),
+                _buildMobileBottomNav(online.length),
+              ],
+            ),
+          );
+        }
+
+        // Desktop / Tablet Layout
         Widget mainBody = Row(
           children: [
             EnterpriseLibrary(
-              width: compact ? (isNarrow ? 300 : 330) : 400,
+              width: isCompactDesktop ? (isNarrowDesktop ? 300 : 330) : 400,
               playlist: _playlist,
               currentFilename: _isStopped ? null : _currentFilename,
               selectedIndex: _selectedIndex,
@@ -2457,7 +2692,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
               onEditItem: _editItem,
               jobsPanel: _buildJobsPanel(),
             ),
-            if (!isNarrow)
+            if (!isNarrowDesktop)
               CommandCenterMonitor(
                 jumpToFilename: _isStopped ? null : _currentFilename,
                 previewController: _previewFilename == _currentFilename ? _previewController : null,
@@ -2517,7 +2752,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
                 ),
               ),
             DeviceCommandWall(
-              width: compact ? (isNarrow ? 290 : 310) : 350,
+              width: isCompactDesktop ? (isNarrowDesktop ? 290 : 310) : 350,
               devices: devices,
               playlist: _playlist,
               filter: _deviceFilter,
@@ -2534,7 +2769,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
           ],
         );
 
-        if (isNarrow) {
+        if (isNarrowDesktop) {
           mainBody = SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: mainBody,
@@ -2693,6 +2928,50 @@ class _SourceOptionTile extends StatelessWidget {
               ),
               if (selected)
                 const Icon(Icons.check_circle_rounded, size: 18, color: AppColors.actionBlue),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MobileActionButton({
+    required this.icon,
+    required this.label,
+    this.color = AppColors.actionBlue,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withOpacity(0.4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+              ),
             ],
           ),
         ),
