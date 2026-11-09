@@ -61,68 +61,66 @@ class ProCommandHeader extends StatelessWidget {
               horizontal: AppSpacing.s3,
               vertical: AppSpacing.s2,
             ),
-            child: Row(
-              children: [
-                // Branding Area
-                _buildBranding(context),
-                const SizedBox(width: AppSpacing.s3),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // Branding Area
+                  _buildBranding(context),
+                  const SizedBox(width: AppSpacing.s3),
 
-                // Summary Cards (scroll horizontally on narrow screens)
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        SummaryCard(
-                          label: 'TOTAL DEVICES',
-                          value: '$totalDevices',
-                          icon: Icons.devices,
-                          selected: activeFilter == 'total',
-                          onTap: () => onCardTap?.call('total'),
-                        ),
-                        const SizedBox(width: AppSpacing.s2),
-                        SummaryCard(
-                          label: 'ACTIVE NODES',
-                          value: '$onlineCount',
-                          icon: Icons.hub,
-                          color: AppColors.successEmerald,
-                          selected: activeFilter == 'active',
-                          onTap: () => onCardTap?.call('active'),
-                        ),
-                        const SizedBox(width: AppSpacing.s2),
-                        SummaryCard(
-                          label: 'CRITICAL/OFFLINE',
-                          value: '$offlineCount',
-                          icon: Icons.gpp_maybe,
-                          color: AppColors.dangerRose,
-                          selected: activeFilter == 'critical',
-                          onTap: () => onCardTap?.call('critical'),
-                        ),
-                        const SizedBox(width: AppSpacing.s2),
-                        SummaryCard(
-                          label: 'SERVER UPTIME',
-                          value: serverLoad,
-                          icon: Icons.speed,
-                          useMono: true,
-                          color: serverRunning ? null : AppColors.dangerRose,
-                          onTap: () => onCardTap?.call('load'),
-                        ),
-                      ],
-                    ),
+                  // Summary Cards
+                  Row(
+                    children: [
+                      SummaryCard(
+                        label: 'TOTAL DEVICES',
+                        value: '$totalDevices',
+                        icon: Icons.devices,
+                        selected: activeFilter == 'total',
+                        onTap: () => onCardTap?.call('total'),
+                      ),
+                      const SizedBox(width: AppSpacing.s2),
+                      SummaryCard(
+                        label: 'ACTIVE NODES',
+                        value: '$onlineCount',
+                        icon: Icons.hub,
+                        color: AppColors.successEmerald,
+                        selected: activeFilter == 'active',
+                        onTap: () => onCardTap?.call('active'),
+                      ),
+                      const SizedBox(width: AppSpacing.s2),
+                      SummaryCard(
+                        label: 'CRITICAL/OFFLINE',
+                        value: '$offlineCount',
+                        icon: Icons.gpp_maybe,
+                        color: AppColors.dangerRose,
+                        selected: activeFilter == 'critical',
+                        onTap: () => onCardTap?.call('critical'),
+                      ),
+                      const SizedBox(width: AppSpacing.s2),
+                      SummaryCard(
+                        label: 'SERVER UPTIME',
+                        value: serverLoad,
+                        icon: Icons.speed,
+                        useMono: true,
+                        color: serverRunning ? null : AppColors.dangerRose,
+                        onTap: () => onCardTap?.call('load'),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: AppSpacing.s2),
+                  const SizedBox(width: AppSpacing.s3),
 
-                // System Info Stack
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const DigitalClock(),
-                    const SizedBox(height: 4),
-                    _buildIpBadge(),
-                  ],
-                ),
-              ],
+                  // System Info Stack
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const DigitalClock(),
+                      const SizedBox(height: 4),
+                      _buildIpBadge(),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           

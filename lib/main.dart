@@ -2427,6 +2427,115 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     return Scaffold(
       body: LayoutBuilder(builder: (context, constraints) {
         final compact = constraints.maxWidth < 1280;
+        final isNarrow = constraints.maxWidth < 1050;
+
+        Widget mainBody = Row(
+          children: [
+            EnterpriseLibrary(
+              width: compact ? (isNarrow ? 300 : 330) : 400,
+              playlist: _playlist,
+              currentFilename: _isStopped ? null : _currentFilename,
+              selectedIndex: _selectedIndex,
+              selectedIndices: _selectedIndices,
+              busy: _busyImporting,
+              mediaDir: _mediaDir,
+              onItemSelected: (i) => setState(() => _selectedIndex = i),
+              onItemDoubleTap: (i) => _playFileAtIndex(i, reason: 'Now playing'),
+              onItemReorder: _onReorder,
+              onToggleSelect: (i) => setState(() =>
+                  _selectedIndices.contains(i) ? _selectedIndices.remove(i) : _selectedIndices.add(i)),
+              onSelectAll: _selectAll,
+              onDeleteSelected: _deleteSelected,
+              onAddMedia: _pickFiles,
+              onFilesDropped: _importFiles,
+              onAddYoutube: _addYoutubeLink,
+              onEditItem: _editItem,
+              jobsPanel: _buildJobsPanel(),
+            ),
+            if (!isNarrow)
+              CommandCenterMonitor(
+                jumpToFilename: _isStopped ? null : _currentFilename,
+                previewController: _previewFilename == _currentFilename ? _previewController : null,
+                isPaused: _isPaused,
+                clientCount: online.length,
+                syncedCount: syncedCount,
+                activeItem: activeItem,
+                nextItem: nextItem,
+                positionMs: masterPos,
+                durationMs: durationMs,
+                mediaDir: _mediaDir,
+                shuffle: _shuffle,
+                repeatOne: _repeatOne,
+                emergencyActive: _emergencyActive,
+                emergencyMessage: _emergencyMessage,
+                emergencyMediaFilename: _emergencyMediaFilename,
+                emergencyRemainingSeconds: _emergencyRemainingSeconds,
+                screenSharingActive: _screenSharingActive,
+                screenSharingTargetLabel: _screenSharingTargetLabel,
+                onStopScreenShare: _stopScreenSharing,
+                monitorMuted: _monitorMuted,
+                onToggleMonitorMute: () {
+                  setState(() => _monitorMuted = !_monitorMuted);
+                  _applyPreviewVolume();
+                },
+                onSeekTo: (ms) => _seekTo(ms),
+              )
+            else
+              SizedBox(
+                width: 450,
+                child: CommandCenterMonitor(
+                  jumpToFilename: _isStopped ? null : _currentFilename,
+                  previewController: _previewFilename == _currentFilename ? _previewController : null,
+                  isPaused: _isPaused,
+                  clientCount: online.length,
+                  syncedCount: syncedCount,
+                  activeItem: activeItem,
+                  nextItem: nextItem,
+                  positionMs: masterPos,
+                  durationMs: durationMs,
+                  mediaDir: _mediaDir,
+                  shuffle: _shuffle,
+                  repeatOne: _repeatOne,
+                  emergencyActive: _emergencyActive,
+                  emergencyMessage: _emergencyMessage,
+                  emergencyMediaFilename: _emergencyMediaFilename,
+                  emergencyRemainingSeconds: _emergencyRemainingSeconds,
+                  screenSharingActive: _screenSharingActive,
+                  screenSharingTargetLabel: _screenSharingTargetLabel,
+                  onStopScreenShare: _stopScreenSharing,
+                  monitorMuted: _monitorMuted,
+                  onToggleMonitorMute: () {
+                    setState(() => _monitorMuted = !_monitorMuted);
+                    _applyPreviewVolume();
+                  },
+                  onSeekTo: (ms) => _seekTo(ms),
+                ),
+              ),
+            DeviceCommandWall(
+              width: compact ? (isNarrow ? 290 : 310) : 350,
+              devices: devices,
+              playlist: _playlist,
+              filter: _deviceFilter,
+              commands: _deviceCommands,
+              screenshots: _screenshots,
+              currentFilename: _isStopped ? null : _currentFilename,
+              masterPositionMs: masterPos,
+              activity: _activity,
+              onCommand: _deviceCommand,
+              onViewScreenshot: _showScreenshot,
+              onForget: (id) => _forgetDevice(id),
+              onClearFilter: () => setState(() => _deviceFilter = 'total'),
+            ),
+          ],
+        );
+
+        if (isNarrow) {
+          mainBody = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: mainBody,
+          );
+        }
+
         return Column(
           children: [
             ProCommandHeader(
@@ -2458,73 +2567,7 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
               },
             ),
             Expanded(
-              child: Row(
-                children: [
-                  EnterpriseLibrary(
-                    width: compact ? 330 : 400,
-                    playlist: _playlist,
-                    currentFilename: _isStopped ? null : _currentFilename,
-                    selectedIndex: _selectedIndex,
-                    selectedIndices: _selectedIndices,
-                    busy: _busyImporting,
-                    mediaDir: _mediaDir,
-                    onItemSelected: (i) => setState(() => _selectedIndex = i),
-                    onItemDoubleTap: (i) => _playFileAtIndex(i, reason: 'Now playing'),
-                    onItemReorder: _onReorder,
-                    onToggleSelect: (i) => setState(() =>
-                        _selectedIndices.contains(i) ? _selectedIndices.remove(i) : _selectedIndices.add(i)),
-                    onSelectAll: _selectAll,
-                    onDeleteSelected: _deleteSelected,
-                    onAddMedia: _pickFiles,
-                    onFilesDropped: _importFiles,
-                    onAddYoutube: _addYoutubeLink,
-                    onEditItem: _editItem,
-                    jobsPanel: _buildJobsPanel(),
-                  ),
-                  CommandCenterMonitor(
-                    jumpToFilename: _isStopped ? null : _currentFilename,
-                    previewController: _previewFilename == _currentFilename ? _previewController : null,
-                    isPaused: _isPaused,
-                    clientCount: online.length,
-                    syncedCount: syncedCount,
-                    activeItem: activeItem,
-                    nextItem: nextItem,
-                    positionMs: masterPos,
-                    durationMs: durationMs,
-                    mediaDir: _mediaDir,
-                    shuffle: _shuffle,
-                    repeatOne: _repeatOne,
-                    emergencyActive: _emergencyActive,
-                    emergencyMessage: _emergencyMessage,
-                    emergencyMediaFilename: _emergencyMediaFilename,
-                    emergencyRemainingSeconds: _emergencyRemainingSeconds,
-                    screenSharingActive: _screenSharingActive,
-                    screenSharingTargetLabel: _screenSharingTargetLabel,
-                    onStopScreenShare: _stopScreenSharing,
-                    monitorMuted: _monitorMuted,
-                    onToggleMonitorMute: () {
-                      setState(() => _monitorMuted = !_monitorMuted);
-                      _applyPreviewVolume();
-                    },
-                    onSeekTo: (ms) => _seekTo(ms),
-                  ),
-                  DeviceCommandWall(
-                    width: compact ? 310 : 350,
-                    devices: devices,
-                    playlist: _playlist,
-                    filter: _deviceFilter,
-                    commands: _deviceCommands,
-                    screenshots: _screenshots,
-                    currentFilename: _isStopped ? null : _currentFilename,
-                    masterPositionMs: masterPos,
-                    activity: _activity,
-                    onCommand: _deviceCommand,
-                    onViewScreenshot: _showScreenshot,
-                    onForget: (id) => _forgetDevice(id),
-                    onClearFilter: () => setState(() => _deviceFilter = 'total'),
-                  ),
-                ],
-              ),
+              child: mainBody,
             ),
             CommandCenterDock(
               isPaused: _isPaused || _isStopped,
