@@ -1960,22 +1960,6 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
     }
   }
 
-  Future<void> _pickBrandingImage() async {
-    if (_mediaDir.isEmpty) return;
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-    );
-    if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
-      final src = File(result.files.first.path!);
-      final ext = p.extension(src.path);
-      final dest = File(p.join(_mediaDir, 'logo$ext'));
-      await src.copy(dest.path);
-      setState(() {});
-      _toast('Branding picture updated!');
-    }
-  }
-
   void _showScreenshot(String id) {
     final bytes = _screenshots[id];
     if (bytes == null) return;
@@ -2736,8 +2720,6 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
                 currentFilename: _isStopped ? null : _currentFilename,
                 masterPositionMs: masterPos,
                 activity: _activity,
-                mediaDir: _mediaDir,
-                onPickBrandingImage: _pickBrandingImage,
                 onCommand: _deviceCommand,
                 onViewScreenshot: _showScreenshot,
                 onForget: (id) => _forgetDevice(id),
@@ -2898,8 +2880,6 @@ if (\$p) { [WinUtil]::ShowWindowAsync(\$p.MainWindowHandle, 4) }
               currentFilename: _isStopped ? null : _currentFilename,
               masterPositionMs: masterPos,
               activity: _activity,
-              mediaDir: _mediaDir,
-              onPickBrandingImage: _pickBrandingImage,
               onCommand: _deviceCommand,
               onViewScreenshot: _showScreenshot,
               onForget: (id) => _forgetDevice(id),

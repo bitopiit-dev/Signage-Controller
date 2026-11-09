@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import '../core/constants.dart';
 import '../models/device_status.dart';
 import '../models/playlist_item.dart';
@@ -18,8 +16,6 @@ class DeviceCommandWall extends StatelessWidget {
   final String? currentFilename;
   final int masterPositionMs;
   final List<ActivityEntry> activity;
-  final String mediaDir;
-  final VoidCallback? onPickBrandingImage;
   final Function(String id, String command, dynamic value) onCommand;
   final Function(String id)? onViewScreenshot;
   final Function(String id)? onForget;
@@ -37,8 +33,6 @@ class DeviceCommandWall extends StatelessWidget {
     this.currentFilename,
     this.masterPositionMs = 0,
     this.activity = const [],
-    this.mediaDir = '',
-    this.onPickBrandingImage,
     this.onViewScreenshot,
     this.onForget,
     this.onClearFilter,
@@ -129,7 +123,6 @@ class DeviceCommandWall extends StatelessWidget {
               ),
               _buildActivityFeed(now),
               _buildWatermark(),
-              _buildBrandingPictureCard(),
             ],
           ),
         ),
@@ -275,98 +268,6 @@ class DeviceCommandWall extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBrandingPictureCard() {
-    File? logoFile;
-    if (mediaDir.isNotEmpty) {
-      for (final name in ['logo.png', 'logo.jpg', 'branding.png', 'branding.jpg', 'watermark.png', 'Captures.JPG', 'brand.png', 'brand.jpg', 'picture.jpg', 'picture.png']) {
-        final f = File(p.join(mediaDir, name));
-        if (f.existsSync()) {
-          logoFile = f;
-          break;
-        }
-      }
-    }
-
-    return Container(
-      width: double.infinity,
-      height: 85,
-      margin: const EdgeInsets.fromLTRB(AppSpacing.s2, 0, AppSpacing.s2, AppSpacing.s2),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(AppRadius.large),
-        border: Border.all(color: AppColors.accentCyan.withOpacity(0.3), width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Tooltip(
-        message: 'Tap to choose custom branding picture',
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPickBrandingImage,
-            child: logoFile != null
-                ? Image.file(
-                    logoFile,
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => _defaultBrandingLogo(),
-                  )
-                : _defaultBrandingLogo(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _defaultBrandingLogo() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          colors: [AppColors.accentCyan.withOpacity(0.12), Colors.transparent],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(AppRadius.standard),
-            ),
-            child: const Icon(Icons.add_a_photo_rounded, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 12),
-          const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'BRANDING PICTURE',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              SizedBox(height: 2),
-              Text(
-                'Tap to add your image',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.accentCyan,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
